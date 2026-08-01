@@ -2,7 +2,12 @@
  * The only module that imports the Claude Agent SDK. Everything else talks to
  * the agent through this surface, so an SDK upgrade touches one file.
  */
-import { query, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import {
+  query,
+  type Query,
+  type SDKMessage,
+  type SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import { createInputPump, type InputPump } from "./inputPump.js";
 
 export type { SDKMessage };

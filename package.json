@@ -18,7 +18,8 @@
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "prettier --check ."
+    "lint": "prettier --check .",
+    "format": "prettier --write ."
   },
   "keywords": [
     "ai",
