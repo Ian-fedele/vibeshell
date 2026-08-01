@@ -1,75 +1,26 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { EngineClient, type ConnectionStatus } from "./engine";
-import type { EngineEvent } from "./protocol";
+import type { Pane as PaneState } from "./store";
 
-type FeedItem =
-  | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string }
-  | { kind: "tool"; name: string }
-  | { kind: "result"; ok: boolean; durationMs: number; costUsd: number; reason?: string };
-
-const MODEL = "claude-opus-5";
-
-function appendAssistant(prev: FeedItem[], text: string): FeedItem[] {
-  const last = prev[prev.length - 1];
-  if (last && last.kind === "assistant") {
-    return [...prev.slice(0, -1), { kind: "assistant", text: last.text + text }];
-  }
-  return [...prev, { kind: "assistant", text }];
+interface PaneProps {
+  pane: PaneState;
+  onSend: (text: string) => void;
+  onClose: () => void;
 }
 
-export function Pane() {
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [status, setStatus] = useState<ConnectionStatus>("connecting");
-  const [cost, setCost] = useState(0);
+export function Pane({ pane, onSend, onClose }: PaneProps) {
   const [input, setInput] = useState("");
-  const clientRef = useRef<EngineClient | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (clientRef.current) return; // guard React StrictMode double-invoke
-    const client = new EngineClient(handleEvent, setStatus);
-    clientRef.current = client;
-    client.connect();
-    client.send({
-      type: "create_session",
-      requestId: "main",
-      provider: "claude",
-      model: MODEL,
-      cwd: ".",
-    });
-  }, []);
+  const ready = pane.sessionId !== null;
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
-  }, [items]);
-
-  function handleEvent(ev: EngineEvent) {
-    if (ev.type === "session_created") {
-      sessionIdRef.current = ev.sessionId;
-    } else if (ev.type === "agent_event") {
-      const e = ev.event;
-      if (e.type === "text") {
-        setItems((prev) => appendAssistant(prev, e.text));
-      } else if (e.type === "tool") {
-        setItems((prev) => [...prev, { kind: "tool", name: e.name }]);
-      } else if (e.type === "result") {
-        if (e.ok) setCost((c) => c + e.costUsd);
-        setItems((prev) => [...prev, { kind: "result", ...e }]);
-      }
-    } else if (ev.type === "error") {
-      setItems((prev) => [...prev, { kind: "result", ok: false, durationMs: 0, costUsd: 0, reason: ev.message }]);
-    }
-  }
+  }, [pane.items]);
 
   function submit(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    const sessionId = sessionIdRef.current;
-    if (!text || !sessionId) return;
-    setItems((prev) => [...prev, { kind: "user", text }]);
-    clientRef.current?.send({ type: "send_message", sessionId, text });
+    if (!text || !ready) return;
+    onSend(text);
     setInput("");
   }
 
@@ -81,14 +32,14 @@ export function Pane() {
           <i />
           <i />
         </span>
-        <span className="pane-name">vibeshell — session</span>
+        <span className="pane-name">{pane.title}</span>
+        <button className="pane-close" onClick={onClose} title="Close session" aria-label="Close session">
+          ×
+        </button>
       </div>
 
       <div className="feed" ref={feedRef}>
-        <div className="banner">
-          {MODEL} · {status === "open" ? "connected" : status}
-        </div>
-        {items.map((item, i) => {
+        {pane.items.map((item, i) => {
           if (item.kind === "user") {
             return (
               <div className="row user" key={i}>
@@ -110,6 +61,13 @@ export function Pane() {
               </div>
             );
           }
+          if (item.kind === "notice") {
+            return (
+              <div className="row notice" key={i}>
+                {item.text}
+              </div>
+            );
+          }
           return (
             <div className="row result" key={i}>
               {item.ok
@@ -123,18 +81,18 @@ export function Pane() {
       <form className="composer" onSubmit={submit}>
         <span className="car">›</span>
         <input
-          autoFocus
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={sessionIdRef.current ? "Message the agent…" : "Connecting to engine…"}
+          placeholder={ready ? "Message the agent…" : "Connecting to engine…"}
+          disabled={!ready}
         />
       </form>
 
       <div className="statusbar">
-        <span className={`dot ${status}`} />
-        <span className="model">{MODEL}</span>
+        <span className={`dot ${ready ? "open" : "connecting"}`} />
+        <span className="model">claude-opus-5</span>
         <span className="spacer" />
-        <span className="cost">${cost.toFixed(4)} session</span>
+        <span className="cost">${pane.cost.toFixed(4)}</span>
       </div>
     </section>
   );
