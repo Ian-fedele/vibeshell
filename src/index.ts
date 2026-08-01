@@ -5,44 +5,46 @@
  */
 import * as readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { createSession, type SDKMessage } from "./agent/session.js";
+import { createSession, type AgentEvent } from "./agent/index.js";
 
+const DEFAULT_PROVIDER = "claude";
 const DEFAULT_MODEL = "claude-opus-5";
 
 const dim = (s: string): string => `\x1b[2m${s}\x1b[0m`;
 
-/** Render one SDK message. Returns true when the turn is complete. */
-function render(msg: SDKMessage, cost: { usd: number }): boolean {
-  switch (msg.type) {
-    case "assistant":
-      for (const block of msg.message.content) {
-        if (block.type === "text") stdout.write(block.text);
-        else if (block.type === "tool_use") stdout.write(dim(`\n[${block.name}] `));
-      }
+/** Render one normalized event. Returns true when the turn is complete. */
+function render(event: AgentEvent, cost: { usd: number }): boolean {
+  switch (event.type) {
+    case "text":
+      stdout.write(event.text);
+      return false;
+    case "tool":
+      stdout.write(dim(`\n[${event.name}] `));
       return false;
     case "result": {
       stdout.write("\n");
-      if (msg.subtype === "success") {
-        cost.usd += msg.total_cost_usd;
+      if (event.ok) {
+        cost.usd += event.costUsd;
         stdout.write(
           dim(
-            `— ${(msg.duration_ms / 1000).toFixed(1)}s · ` +
-              `$${msg.total_cost_usd.toFixed(4)} this turn · ` +
+            `— ${(event.durationMs / 1000).toFixed(1)}s · ` +
+              `$${event.costUsd.toFixed(4)} this turn · ` +
               `$${cost.usd.toFixed(4)} session`,
           ) + "\n",
         );
       } else {
-        stdout.write(dim(`— turn ended: ${msg.subtype}`) + "\n");
+        stdout.write(dim(`— turn ended: ${event.reason ?? "error"}`) + "\n");
       }
       return true;
     }
-    default:
-      return false;
   }
 }
 
 async function main(): Promise<void> {
-  const session = createSession({ model: DEFAULT_MODEL, cwd: process.cwd() });
+  const session = createSession(DEFAULT_PROVIDER, {
+    model: DEFAULT_MODEL,
+    cwd: process.cwd(),
+  });
   const rl = readline.createInterface({ input: stdin, output: stdout });
   const cost = { usd: 0 };
 
@@ -89,8 +91,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  for await (const msg of session.messages) {
-    if (render(msg, cost)) {
+  for await (const event of session.events) {
+    if (render(event, cost)) {
       if (!(await promptForTurn())) break;
     }
   }
