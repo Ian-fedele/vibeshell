@@ -1,0 +1,46 @@
+{
+  "name": "vibeshell",
+  "version": "0.0.1",
+  "description": "An open-source, terminal-first agentic coding assistant.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "vibeshell": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "prettier --check ."
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "coding-assistant",
+    "claude",
+    "terminal"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ian-fedele/vibeshell.git"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.220"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "prettier": "^3.9.6",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
