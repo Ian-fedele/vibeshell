@@ -12,7 +12,9 @@ const MODEL = "claude-opus-5";
 const PROVIDER = "claude";
 
 let paneCounter = 0;
+let workspaceCounter = 1; // Workspace 1 exists in initialState
 const nextPaneId = (): string => `pane_${++paneCounter}`;
+const nextWorkspaceId = (): string => `ws_${++workspaceCounter}`;
 
 export function useEngine() {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -33,10 +35,24 @@ export function useEngine() {
 
   const addPane = useCallback(() => {
     const paneId = nextPaneId();
-    const title = `session ${stateRef.current.panes.length + 1}`;
-    dispatch({ type: "add_pane", paneId, title });
+    const workspaceId = stateRef.current.activeWorkspaceId;
+    const count = stateRef.current.panes.filter((p) => p.workspaceId === workspaceId).length;
+    dispatch({ type: "add_pane", paneId, workspaceId, title: `session ${count + 1}` });
     createSession(paneId);
   }, [createSession]);
+
+  const addWorkspace = useCallback(() => {
+    const workspaceId = nextWorkspaceId();
+    dispatch({ type: "add_workspace", workspaceId, name: `Workspace ${workspaceCounter}` });
+    // A fresh workspace starts with one ready session.
+    const paneId = nextPaneId();
+    dispatch({ type: "add_pane", paneId, workspaceId, title: "session 1" });
+    createSession(paneId);
+  }, [createSession]);
+
+  const selectWorkspace = useCallback((workspaceId: string) => {
+    dispatch({ type: "select_workspace", workspaceId });
+  }, []);
 
   const sendMessage = useCallback((paneId: string, text: string) => {
     const pane = stateRef.current.panes.find((p) => p.id === paneId);
@@ -70,5 +86,5 @@ export function useEngine() {
     prevStatus.current = state.status;
   }, [state.status, createSession]);
 
-  return { state, addPane, sendMessage, closePane };
+  return { state, addPane, addWorkspace, selectWorkspace, sendMessage, closePane };
 }

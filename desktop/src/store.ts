@@ -17,26 +17,44 @@ export type FeedItem =
 
 export interface Pane {
   id: string;
+  workspaceId: string;
   sessionId: string | null;
   title: string;
   items: FeedItem[];
   cost: number;
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+}
+
 export interface State {
   status: ConnectionStatus;
+  workspaces: Workspace[];
+  activeWorkspaceId: string;
   panes: Pane[];
   bySession: Record<string, string>; // sessionId -> paneId
 }
 
 export type Action =
   | { type: "status"; status: ConnectionStatus }
-  | { type: "add_pane"; paneId: string; title: string }
+  | { type: "add_workspace"; workspaceId: string; name: string }
+  | { type: "select_workspace"; workspaceId: string }
+  | { type: "add_pane"; paneId: string; workspaceId: string; title: string }
   | { type: "close_pane"; paneId: string }
   | { type: "user_message"; paneId: string; text: string }
   | { type: "engine"; event: EngineEvent };
 
-export const initialState: State = { status: "connecting", panes: [], bySession: {} };
+export const DEFAULT_WORKSPACE_ID = "ws_1";
+
+export const initialState: State = {
+  status: "connecting",
+  workspaces: [{ id: DEFAULT_WORKSPACE_ID, name: "Workspace 1" }],
+  activeWorkspaceId: DEFAULT_WORKSPACE_ID,
+  panes: [],
+  bySession: {},
+};
 
 function updatePane(state: State, paneId: string, fn: (p: Pane) => Pane): State {
   return { ...state, panes: state.panes.map((p) => (p.id === paneId ? fn(p) : p)) };
@@ -112,10 +130,28 @@ export function reducer(state: State, action: Action): State {
       }
       return { ...state, status: action.status };
     }
+    case "add_workspace":
+      return {
+        ...state,
+        workspaces: [...state.workspaces, { id: action.workspaceId, name: action.name }],
+        activeWorkspaceId: action.workspaceId,
+      };
+    case "select_workspace":
+      return { ...state, activeWorkspaceId: action.workspaceId };
     case "add_pane":
       return {
         ...state,
-        panes: [...state.panes, { id: action.paneId, sessionId: null, title: action.title, items: [], cost: 0 }],
+        panes: [
+          ...state.panes,
+          {
+            id: action.paneId,
+            workspaceId: action.workspaceId,
+            sessionId: null,
+            title: action.title,
+            items: [],
+            cost: 0,
+          },
+        ],
       };
     case "close_pane": {
       const pane = state.panes.find((p) => p.id === action.paneId);
