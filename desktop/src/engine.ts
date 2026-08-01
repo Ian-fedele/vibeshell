@@ -5,12 +5,16 @@
 import type { ClientCommand, EngineEvent } from "./protocol";
 
 const ENGINE_URL = "ws://localhost:4517";
+const RETRY_MS = 500;
+const MAX_RETRIES = 20;
 
 export type ConnectionStatus = "connecting" | "open" | "closed";
 
 export class EngineClient {
   private ws: WebSocket | null = null;
   private queue: ClientCommand[] = [];
+  private opened = false;
+  private retries = 0;
 
   constructor(
     private readonly onEvent: (event: EngineEvent) => void,
@@ -22,6 +26,8 @@ export class EngineClient {
     const ws = new WebSocket(ENGINE_URL);
     this.ws = ws;
     ws.onopen = () => {
+      this.opened = true;
+      this.retries = 0;
       this.onStatus("open");
       for (const cmd of this.queue) ws.send(JSON.stringify(cmd));
       this.queue = [];
@@ -33,7 +39,16 @@ export class EngineClient {
         // ignore malformed frames
       }
     };
-    ws.onclose = () => this.onStatus("closed");
+    ws.onclose = () => {
+      this.onStatus("closed");
+      // Retry only until the first successful connection — this covers the
+      // dev-startup race where the app opens before the engine is listening.
+      if (!this.opened && this.retries < MAX_RETRIES) {
+        this.retries += 1;
+        setTimeout(() => this.connect(), RETRY_MS);
+      }
+    };
+    ws.onerror = () => ws.close();
   }
 
   send(cmd: ClientCommand): void {
