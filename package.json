@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "prettier --check .",
     "format": "prettier --write .",
-    "dev:engine": "tsx src/server.ts"
+    "dev:engine": "tsx src/server.ts",
+    "dev:desktop": "pnpm -C desktop tauri dev"
   },
   "keywords": [
     "ai",
