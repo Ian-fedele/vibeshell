@@ -66,7 +66,15 @@ The `desktop/` app manages its own toolchain and is excluded from the engine's C
 }
 ```
 
-MCP tool calls go through the same approval prompt as any other gated tool. (Custom slash commands, hooks, and subagents are on the roadmap.)
+MCP tool calls go through the same approval prompt as any other gated tool.
+
+**Custom slash commands.** A `<name>.md` under `.vibeshell/commands/` (or `.claude/commands/`) becomes `/name`. Sending `/name args` expands the template (`$ARGUMENTS` → your args) before the agent sees it.
+
+**Subagents.** A `<name>.md` under `.vibeshell/agents/` (frontmatter `description` / optional `tools`, `model`; body is the system prompt) becomes a subagent the main agent can delegate to.
+
+## Self-hosted development (building vibeshell in vibeshell)
+
+vibeshell is itself a coding agent operating on whatever directory the engine runs in — so it can improve its own code. Toggle **isolate** in the top bar and each new session runs in its own git worktree on a branch (`vibeshell/<sessionId>`): edits never touch your main checkout or other sessions, and on close the work is committed to that branch for you to review and merge. This is the safe way to let the agent edit the engine that's running it.
 
 ## License
 
