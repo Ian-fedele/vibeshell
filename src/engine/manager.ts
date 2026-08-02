@@ -10,6 +10,7 @@ import {
   type AgentSessionOptions,
 } from "../agent/index.js";
 import { gitCheckpointer, type Checkpointer } from "./checkpoint.js";
+import { loadCommands, expandCommand, type Commands } from "./commands.js";
 import type { ClientCommand, EngineEvent } from "./protocol.js";
 
 export type CreateSessionFn = (
@@ -30,6 +31,7 @@ interface SessionEntry {
   session: AgentSession;
   cwd: string;
   checkpoint: string | null;
+  commands: Commands;
 }
 
 export class SessionManager {
@@ -63,7 +65,9 @@ export class SessionManager {
           // concurrent: model latency far exceeds snapshot time, so it lands
           // before the agent's first edit.
           void this.checkpoint(cmd.sessionId, entry);
-          entry.session.send(cmd.text);
+          // Expand a "/command" into its prompt template (agent sees the
+          // expansion; the pane already shows what the user typed).
+          entry.session.send(expandCommand(cmd.text, entry.commands) ?? cmd.text);
           return;
         }
         case "permission_response":
@@ -94,7 +98,12 @@ export class SessionManager {
   create(provider: string, options: AgentSessionOptions): string {
     const sessionId = `sess_${++this.counter}`;
     const session = this.createSessionFn(provider, options);
-    this.sessions.set(sessionId, { session, cwd: options.cwd, checkpoint: null });
+    this.sessions.set(sessionId, {
+      session,
+      cwd: options.cwd,
+      checkpoint: null,
+      commands: loadCommands(options.cwd),
+    });
     void this.pump(sessionId, session);
     return sessionId;
   }

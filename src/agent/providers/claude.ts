@@ -12,9 +12,11 @@ import {
   type PermissionResult,
   type PermissionUpdate,
   type McpServerConfig,
+  type AgentDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import { createInputPump } from "../inputPump.js";
 import { loadMcpServers } from "./mcp.js";
+import { loadAgents } from "./agents.js";
 import type {
   AgentEvent,
   AgentProvider,
@@ -106,6 +108,7 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
   const pending = new Map<string, Pending>();
   const mcpServers = loadMcpServers(options.cwd) as
     Record<string, McpServerConfig> | undefined;
+  const agents = loadAgents(options.cwd) as Record<string, AgentDefinition> | undefined;
 
   const q: Query = query({
     prompt: input.iterable,
@@ -118,6 +121,8 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
       permissionMode: "default",
       // MCP servers from a repo-level .mcp.json, loaded explicitly (see mcp.ts).
       ...(mcpServers ? { mcpServers } : {}),
+      // Subagents from .vibeshell/agents/*.md (see agents.ts).
+      ...(agents ? { agents } : {}),
       canUseTool: (toolName, toolInput, opts) => {
         if (isAutoAllowed(toolName)) {
           return Promise.resolve<PermissionResult>({ behavior: "allow" });
