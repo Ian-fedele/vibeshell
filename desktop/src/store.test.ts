@@ -90,6 +90,21 @@ describe("session store", () => {
     expect(state.panes.filter((p) => p.workspaceId === "ws_2")).toHaveLength(1);
   });
 
+  it("a checkpoint event toggles the pane's canUndo flag", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
+      { type: "engine", event: { type: "checkpoint", sessionId: "sess_a", available: true } },
+    ]);
+    expect(state.panes[0]!.canUndo).toBe(true);
+
+    const cleared = reducer(state, {
+      type: "engine",
+      event: { type: "checkpoint", sessionId: "sess_a", available: false },
+    });
+    expect(cleared.panes[0]!.canUndo).toBe(false);
+  });
+
   it("select_workspace changes only the active workspace", () => {
     const state = run([
       { type: "add_workspace", workspaceId: "ws_2", name: "Workspace 2" },

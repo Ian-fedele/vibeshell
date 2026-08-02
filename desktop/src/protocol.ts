@@ -24,11 +24,13 @@ export type ClientCommand =
   | { type: "create_session"; requestId: string; provider: string; model: string; cwd: string }
   | { type: "send_message"; sessionId: string; text: string }
   | { type: "permission_response"; sessionId: string; requestId: string; decision: PermissionDecision }
+  | { type: "undo"; sessionId: string }
   | { type: "interrupt"; sessionId: string }
   | { type: "close_session"; sessionId: string };
 
 export type EngineEvent =
   | { type: "session_created"; requestId: string; sessionId: string }
   | { type: "agent_event"; sessionId: string; event: AgentEvent }
+  | { type: "checkpoint"; sessionId: string; available: boolean }
   | { type: "session_closed"; sessionId: string }
   | { type: "error"; message: string; sessionId?: string; requestId?: string };

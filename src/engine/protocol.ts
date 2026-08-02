@@ -22,6 +22,7 @@ export type ClientCommand =
       requestId: string;
       decision: PermissionDecision;
     }
+  | { type: "undo"; sessionId: string }
   | { type: "interrupt"; sessionId: string }
   | { type: "close_session"; sessionId: string };
 
@@ -29,5 +30,6 @@ export type ClientCommand =
 export type EngineEvent =
   | { type: "session_created"; requestId: string; sessionId: string }
   | { type: "agent_event"; sessionId: string; event: AgentEvent }
+  | { type: "checkpoint"; sessionId: string; available: boolean }
   | { type: "session_closed"; sessionId: string }
   | { type: "error"; message: string; sessionId?: string; requestId?: string };

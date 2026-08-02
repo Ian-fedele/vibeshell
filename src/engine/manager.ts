@@ -9,6 +9,7 @@ import {
   type AgentSession,
   type AgentSessionOptions,
 } from "../agent/index.js";
+import { gitCheckpointer, type Checkpointer } from "./checkpoint.js";
 import type { ClientCommand, EngineEvent } from "./protocol.js";
 
 export type CreateSessionFn = (
@@ -21,17 +22,27 @@ export interface SessionManagerOptions {
   onEvent: (event: EngineEvent) => void;
   /** Override session creation (tests inject a fake provider). */
   createSession?: CreateSessionFn;
+  /** Override the working-tree checkpointer (tests inject a fake). */
+  checkpointer?: Checkpointer;
+}
+
+interface SessionEntry {
+  session: AgentSession;
+  cwd: string;
+  checkpoint: string | null;
 }
 
 export class SessionManager {
   private readonly onEvent: (event: EngineEvent) => void;
   private readonly createSessionFn: CreateSessionFn;
-  private readonly sessions = new Map<string, AgentSession>();
+  private readonly checkpointer: Checkpointer;
+  private readonly sessions = new Map<string, SessionEntry>();
   private counter = 0;
 
   constructor(options: SessionManagerOptions) {
     this.onEvent = options.onEvent;
     this.createSessionFn = options.createSession ?? defaultCreateSession;
+    this.checkpointer = options.checkpointer ?? gitCheckpointer;
   }
 
   /** Route a client command; never throws — failures surface as error events. */
@@ -46,19 +57,31 @@ export class SessionManager {
           this.onEvent({ type: "session_created", requestId: cmd.requestId, sessionId });
           return;
         }
-        case "send_message":
-          this.require(cmd.sessionId).send(cmd.text);
+        case "send_message": {
+          const entry = this.require(cmd.sessionId);
+          // Snapshot the working tree before the turn. Best-effort and
+          // concurrent: model latency far exceeds snapshot time, so it lands
+          // before the agent's first edit.
+          void this.checkpoint(cmd.sessionId, entry);
+          entry.session.send(cmd.text);
           return;
+        }
         case "permission_response":
-          this.require(cmd.sessionId).respondPermission(cmd.requestId, cmd.decision);
+          this.require(cmd.sessionId).session.respondPermission(
+            cmd.requestId,
+            cmd.decision,
+          );
+          return;
+        case "undo":
+          void this.undo(cmd.sessionId);
           return;
         case "interrupt":
           this.require(cmd.sessionId)
-            .interrupt()
+            .session.interrupt()
             .catch((err: unknown) => this.emitError(this.message(err), cmd.sessionId));
           return;
         case "close_session":
-          this.sessions.get(cmd.sessionId)?.close();
+          this.sessions.get(cmd.sessionId)?.session.close();
           return;
       }
     } catch (err) {
@@ -71,9 +94,31 @@ export class SessionManager {
   create(provider: string, options: AgentSessionOptions): string {
     const sessionId = `sess_${++this.counter}`;
     const session = this.createSessionFn(provider, options);
-    this.sessions.set(sessionId, session);
+    this.sessions.set(sessionId, { session, cwd: options.cwd, checkpoint: null });
     void this.pump(sessionId, session);
     return sessionId;
+  }
+
+  private async checkpoint(sessionId: string, entry: SessionEntry): Promise<void> {
+    try {
+      entry.checkpoint = await this.checkpointer.snapshot(entry.cwd);
+    } catch {
+      entry.checkpoint = null;
+    }
+    this.onEvent({ type: "checkpoint", sessionId, available: entry.checkpoint !== null });
+  }
+
+  private async undo(sessionId: string): Promise<void> {
+    const entry = this.sessions.get(sessionId);
+    if (!entry) return this.emitError(`No such session: ${sessionId}`, sessionId);
+    if (!entry.checkpoint) return this.emitError("Nothing to undo", sessionId);
+    try {
+      await this.checkpointer.restore(entry.cwd, entry.checkpoint);
+      entry.checkpoint = null;
+      this.onEvent({ type: "checkpoint", sessionId, available: false });
+    } catch (err) {
+      this.emitError(this.message(err), sessionId);
+    }
   }
 
   get sessionIds(): string[] {
@@ -93,10 +138,10 @@ export class SessionManager {
     }
   }
 
-  private require(sessionId: string): AgentSession {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new Error(`No such session: ${sessionId}`);
-    return session;
+  private require(sessionId: string): SessionEntry {
+    const entry = this.sessions.get(sessionId);
+    if (!entry) throw new Error(`No such session: ${sessionId}`);
+    return entry;
   }
 
   private emitError(message: string, sessionId?: string): void {

@@ -4,8 +4,16 @@ import { formatTokens } from "./store";
 import "./App.css";
 
 export default function App() {
-  const { state, addPane, addWorkspace, selectWorkspace, sendMessage, closePane, respondPermission } =
-    useEngine();
+  const {
+    state,
+    addPane,
+    addWorkspace,
+    selectWorkspace,
+    sendMessage,
+    closePane,
+    respondPermission,
+    undo,
+  } = useEngine();
   const connected = state.status === "open";
 
   const paneCount = (workspaceId: string) =>
@@ -65,6 +73,7 @@ export default function App() {
                 onSend={(text) => sendMessage(pane.id, text)}
                 onClose={() => closePane(pane.id)}
                 onRespond={(requestId, decision) => respondPermission(pane.id, requestId, decision)}
+                onUndo={() => undo(pane.id)}
               />
             ))
           )}

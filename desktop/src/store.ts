@@ -35,6 +35,7 @@ export interface Pane {
   items: FeedItem[];
   tokens: number;
   pending: PermissionRequest | null;
+  canUndo: boolean;
 }
 
 export interface Workspace {
@@ -58,6 +59,7 @@ export type Action =
   | { type: "close_pane"; paneId: string }
   | { type: "user_message"; paneId: string; text: string }
   | { type: "clear_permission"; paneId: string; decision: PermissionDecision }
+  | { type: "add_notice"; paneId: string; text: string }
   | { type: "engine"; event: EngineEvent };
 
 export const DEFAULT_WORKSPACE_ID = "ws_1";
@@ -119,6 +121,11 @@ function applyEngineEvent(state: State, event: EngineEvent): State {
       if (!paneId) return state;
       return updatePane(state, paneId, (p) => applyAgentEvent(p, event.event));
     }
+    case "checkpoint": {
+      const paneId = state.bySession[event.sessionId];
+      if (!paneId) return state;
+      return updatePane(state, paneId, (p) => ({ ...p, canUndo: event.available }));
+    }
     case "session_closed": {
       const paneId = state.bySession[event.sessionId];
       const bySession = { ...state.bySession };
@@ -152,6 +159,7 @@ export function reducer(state: State, action: Action): State {
                   ...p,
                   sessionId: null,
                   pending: null,
+                  canUndo: false,
                   items: [...p.items, { kind: "notice", text: "disconnected — reconnecting…" }],
                 }
               : p,
@@ -181,6 +189,7 @@ export function reducer(state: State, action: Action): State {
             items: [],
             tokens: 0,
             pending: null,
+            canUndo: false,
           },
         ],
       };
@@ -206,6 +215,11 @@ export function reducer(state: State, action: Action): State {
             text: action.decision.type === "deny" ? "✗ denied" : "✓ approved",
           },
         ],
+      }));
+    case "add_notice":
+      return updatePane(state, action.paneId, (p) => ({
+        ...p,
+        items: [...p.items, { kind: "notice", text: action.text }],
       }));
     case "engine":
       return applyEngineEvent(state, action.event);

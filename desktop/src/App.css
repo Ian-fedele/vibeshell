@@ -436,9 +436,27 @@ body {
   background: var(--bad);
 }
 
-/* ---- pane close button ---- */
-.pane-close {
+/* ---- pane header buttons ---- */
+.pane-undo {
   margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  border-radius: 5px;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+}
+.pane-undo:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.pane-undo:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pane-close {
   background: transparent;
   border: none;
   color: var(--dim);

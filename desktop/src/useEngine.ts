@@ -78,6 +78,13 @@ export function useEngine() {
     [],
   );
 
+  const undo = useCallback((paneId: string) => {
+    const pane = stateRef.current.panes.find((p) => p.id === paneId);
+    if (!pane?.sessionId || !pane.canUndo) return;
+    clientRef.current?.send({ type: "undo", sessionId: pane.sessionId });
+    dispatch({ type: "add_notice", paneId, text: "↩ reverted last turn's file changes" });
+  }, []);
+
   // Connect once, open the first pane.
   useEffect(() => {
     if (clientRef.current) return; // guard StrictMode double-invoke
@@ -97,5 +104,14 @@ export function useEngine() {
     prevStatus.current = state.status;
   }, [state.status, createSession]);
 
-  return { state, addPane, addWorkspace, selectWorkspace, sendMessage, closePane, respondPermission };
+  return {
+    state,
+    addPane,
+    addWorkspace,
+    selectWorkspace,
+    sendMessage,
+    closePane,
+    respondPermission,
+    undo,
+  };
 }

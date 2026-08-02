@@ -8,9 +8,10 @@ interface PaneProps {
   onSend: (text: string) => void;
   onClose: () => void;
   onRespond: (requestId: string, decision: PermissionDecision) => void;
+  onUndo: () => void;
 }
 
-export function Pane({ pane, onSend, onClose, onRespond }: PaneProps) {
+export function Pane({ pane, onSend, onClose, onRespond, onUndo }: PaneProps) {
   const [input, setInput] = useState("");
   const feedRef = useRef<HTMLDivElement | null>(null);
   const ready = pane.sessionId !== null;
@@ -36,6 +37,14 @@ export function Pane({ pane, onSend, onClose, onRespond }: PaneProps) {
           <i />
         </span>
         <span className="pane-name">{pane.title}</span>
+        <button
+          className="pane-undo"
+          onClick={onUndo}
+          disabled={!pane.canUndo}
+          title="Undo last turn's file changes"
+        >
+          ↩ undo
+        </button>
         <button className="pane-close" onClick={onClose} title="Close session" aria-label="Close session">
           ×
         </button>
