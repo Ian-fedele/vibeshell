@@ -94,16 +94,9 @@ body {
 .ws-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.45rem 0.55rem;
-  background: transparent;
-  border: none;
+  gap: 0.15rem;
   border-radius: 6px;
   color: var(--text);
-  font-size: 0.84rem;
-  text-align: left;
-  cursor: pointer;
 }
 .ws-item:hover {
   background: rgba(255, 255, 255, 0.03);
@@ -112,16 +105,77 @@ body {
   background: rgba(79, 209, 197, 0.12);
   color: var(--accent);
 }
-.ws-item .ws-count {
+.ws-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+.ws-select .ws-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-count {
   font-variant-numeric: tabular-nums;
   font-size: 0.72rem;
   color: var(--dim);
   background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   padding: 0.05rem 0.4rem;
+  flex-shrink: 0;
 }
 .ws-item.active .ws-count {
   color: var(--accent);
+}
+.ws-del {
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  opacity: 0;
+}
+.ws-item:hover .ws-del {
+  opacity: 1;
+}
+.ws-del:hover {
+  color: var(--bad);
+}
+.ws-edit {
+  flex: 1;
+  min-width: 0;
+  margin: 0.2rem 0.4rem;
+  background: var(--pane-bg);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 0.84rem;
+  padding: 0.28rem 0.45rem;
+  outline: none;
+  font-family: inherit;
+}
+.model-select {
+  background: var(--pane-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-family: var(--mono);
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
 }
 
 /* ---- empty workspace ---- */

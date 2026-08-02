@@ -9,7 +9,6 @@ import { EngineClient } from "./engine";
 import type { PermissionDecision } from "./protocol";
 import { initialState, reducer, type State } from "./store";
 
-const MODEL = "claude-opus-5";
 const PROVIDER = "claude";
 
 let paneCounter = 0;
@@ -29,7 +28,7 @@ export function useEngine() {
       type: "create_session",
       requestId: paneId,
       provider: PROVIDER,
-      model: MODEL,
+      model: stateRef.current.model,
       cwd: ".",
     });
   }, []);
@@ -53,6 +52,24 @@ export function useEngine() {
 
   const selectWorkspace = useCallback((workspaceId: string) => {
     dispatch({ type: "select_workspace", workspaceId });
+  }, []);
+
+  const renameWorkspace = useCallback((workspaceId: string, name: string) => {
+    const trimmed = name.trim();
+    if (trimmed) dispatch({ type: "rename_workspace", workspaceId, name: trimmed });
+  }, []);
+
+  const deleteWorkspace = useCallback((workspaceId: string) => {
+    const s = stateRef.current;
+    if (s.workspaces.length <= 1) return; // keep at least one
+    for (const pane of s.panes.filter((p) => p.workspaceId === workspaceId)) {
+      if (pane.sessionId) clientRef.current?.send({ type: "close_session", sessionId: pane.sessionId });
+    }
+    dispatch({ type: "delete_workspace", workspaceId });
+  }, []);
+
+  const setModel = useCallback((model: string) => {
+    dispatch({ type: "set_model", model });
   }, []);
 
   const sendMessage = useCallback((paneId: string, text: string) => {
@@ -109,6 +126,9 @@ export function useEngine() {
     addPane,
     addWorkspace,
     selectWorkspace,
+    renameWorkspace,
+    deleteWorkspace,
+    setModel,
     sendMessage,
     closePane,
     respondPermission,

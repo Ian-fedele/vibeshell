@@ -114,6 +114,35 @@ describe("session store", () => {
     expect(state.workspaces).toHaveLength(2);
   });
 
+  it("renames a workspace", () => {
+    const state = run([{ type: "rename_workspace", workspaceId: WS, name: "Renamed" }]);
+    expect(state.workspaces[0]!.name).toBe("Renamed");
+  });
+
+  it("deletes a workspace with its panes and reassigns the active one", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "s1" },
+      { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
+      { type: "add_workspace", workspaceId: "ws_2", name: "Workspace 2" },
+      { type: "add_pane", paneId: "pane_2", workspaceId: "ws_2", title: "s1" },
+      { type: "delete_workspace", workspaceId: WS },
+    ]);
+    expect(state.workspaces.map((w) => w.id)).toEqual(["ws_2"]);
+    expect(state.activeWorkspaceId).toBe("ws_2");
+    expect(state.panes.every((p) => p.workspaceId === "ws_2")).toBe(true);
+    expect(state.bySession).toEqual({}); // sess_a's pane removed
+  });
+
+  it("won't delete the last workspace", () => {
+    const state = run([{ type: "delete_workspace", workspaceId: WS }]);
+    expect(state.workspaces).toHaveLength(1);
+  });
+
+  it("set_model updates the model for new sessions", () => {
+    const state = run([{ type: "set_model", model: "claude-sonnet-5" }]);
+    expect(state.model).toBe("claude-sonnet-5");
+  });
+
   it("sets a pending approval on permission_request and clears it on decision", () => {
     const withRequest = run([
       { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },

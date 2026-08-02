@@ -1,6 +1,7 @@
 import { Pane } from "./Pane";
+import { WorkspaceItem } from "./WorkspaceItem";
 import { useEngine } from "./useEngine";
-import { formatTokens } from "./store";
+import { formatTokens, MODELS } from "./store";
 import "./App.css";
 
 export default function App() {
@@ -9,6 +10,9 @@ export default function App() {
     addPane,
     addWorkspace,
     selectWorkspace,
+    renameWorkspace,
+    deleteWorkspace,
+    setModel,
     sendMessage,
     closePane,
     respondPermission,
@@ -37,14 +41,16 @@ export default function App() {
         </div>
         <div className="ws-list">
           {state.workspaces.map((ws) => (
-            <button
+            <WorkspaceItem
               key={ws.id}
-              className={`ws-item${ws.id === state.activeWorkspaceId ? " active" : ""}`}
-              onClick={() => selectWorkspace(ws.id)}
-            >
-              <span className="ws-name">{ws.name}</span>
-              <span className="ws-count">{paneCount(ws.id)}</span>
-            </button>
+              workspace={ws}
+              active={ws.id === state.activeWorkspaceId}
+              count={paneCount(ws.id)}
+              canDelete={state.workspaces.length > 1}
+              onSelect={() => selectWorkspace(ws.id)}
+              onRename={(name) => renameWorkspace(ws.id, name)}
+              onDelete={() => deleteWorkspace(ws.id)}
+            />
           ))}
         </div>
       </aside>
@@ -52,6 +58,18 @@ export default function App() {
       <div className="main">
         <header className="topbar">
           <span className="crumb">{activeWorkspace?.name ?? "Workspace"}</span>
+          <select
+            className="model-select"
+            value={state.model}
+            onChange={(e) => setModel(e.target.value)}
+            title="Model for new sessions"
+          >
+            {MODELS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
           <span className="spacer" />
           <span className={`conn ${state.status}`}>
             <span className={`dot ${state.status}`} /> {connected ? "engine connected" : state.status}

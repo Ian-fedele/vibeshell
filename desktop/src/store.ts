@@ -45,6 +45,7 @@ export interface Workspace {
 
 export interface State {
   status: ConnectionStatus;
+  model: string;
   workspaces: Workspace[];
   activeWorkspaceId: string;
   panes: Pane[];
@@ -53,8 +54,11 @@ export interface State {
 
 export type Action =
   | { type: "status"; status: ConnectionStatus }
+  | { type: "set_model"; model: string }
   | { type: "add_workspace"; workspaceId: string; name: string }
   | { type: "select_workspace"; workspaceId: string }
+  | { type: "rename_workspace"; workspaceId: string; name: string }
+  | { type: "delete_workspace"; workspaceId: string }
   | { type: "add_pane"; paneId: string; workspaceId: string; title: string }
   | { type: "close_pane"; paneId: string }
   | { type: "user_message"; paneId: string; text: string }
@@ -63,9 +67,13 @@ export type Action =
   | { type: "engine"; event: EngineEvent };
 
 export const DEFAULT_WORKSPACE_ID = "ws_1";
+export const DEFAULT_MODEL = "claude-opus-5";
+
+export const MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"] as const;
 
 export const initialState: State = {
   status: "connecting",
+  model: DEFAULT_MODEL,
   workspaces: [{ id: DEFAULT_WORKSPACE_ID, name: "Workspace 1" }],
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   panes: [],
@@ -168,6 +176,8 @@ export function reducer(state: State, action: Action): State {
       }
       return { ...state, status: action.status };
     }
+    case "set_model":
+      return { ...state, model: action.model };
     case "add_workspace":
       return {
         ...state,
@@ -176,6 +186,34 @@ export function reducer(state: State, action: Action): State {
       };
     case "select_workspace":
       return { ...state, activeWorkspaceId: action.workspaceId };
+    case "rename_workspace":
+      return {
+        ...state,
+        workspaces: state.workspaces.map((w) =>
+          w.id === action.workspaceId ? { ...w, name: action.name } : w,
+        ),
+      };
+    case "delete_workspace": {
+      if (state.workspaces.length <= 1) return state; // keep at least one
+      const workspaces = state.workspaces.filter((w) => w.id !== action.workspaceId);
+      const removed = new Set(
+        state.panes.filter((p) => p.workspaceId === action.workspaceId).map((p) => p.id),
+      );
+      const bySession = Object.fromEntries(
+        Object.entries(state.bySession).filter(([, paneId]) => !removed.has(paneId)),
+      );
+      const activeWorkspaceId =
+        state.activeWorkspaceId === action.workspaceId
+          ? workspaces[0]!.id
+          : state.activeWorkspaceId;
+      return {
+        ...state,
+        workspaces,
+        activeWorkspaceId,
+        panes: state.panes.filter((p) => p.workspaceId !== action.workspaceId),
+        bySession,
+      };
+    }
     case "add_pane":
       return {
         ...state,
