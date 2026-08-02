@@ -54,6 +54,20 @@ pnpm lint        # prettier --check
 
 The `desktop/` app manages its own toolchain and is excluded from the engine's CI.
 
+## Extensibility
+
+**MCP servers.** Drop a `.mcp.json` in the working directory (the Claude Code convention) and vibeshell loads it for that session:
+
+```json
+{
+  "mcpServers": {
+    "github": { "type": "http", "url": "https://api.githubcopilot.com/mcp/" }
+  }
+}
+```
+
+MCP tool calls go through the same approval prompt as any other gated tool. (Custom slash commands, hooks, and subagents are on the roadmap.)
+
 ## License
 
 Apache-2.0

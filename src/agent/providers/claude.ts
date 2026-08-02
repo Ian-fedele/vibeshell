@@ -11,8 +11,10 @@ import {
   type SDKUserMessage,
   type PermissionResult,
   type PermissionUpdate,
+  type McpServerConfig,
 } from "@anthropic-ai/claude-agent-sdk";
 import { createInputPump } from "../inputPump.js";
+import { loadMcpServers } from "./mcp.js";
 import type {
   AgentEvent,
   AgentProvider,
@@ -102,6 +104,8 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
   const input = createInputPump<SDKUserMessage>();
   const output = createInputPump<AgentEvent>();
   const pending = new Map<string, Pending>();
+  const mcpServers = loadMcpServers(options.cwd) as
+    Record<string, McpServerConfig> | undefined;
 
   const q: Query = query({
     prompt: input.iterable,
@@ -112,6 +116,8 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
       // only gate; "default" mode routes gated tools through canUseTool.
       settingSources: [],
       permissionMode: "default",
+      // MCP servers from a repo-level .mcp.json, loaded explicitly (see mcp.ts).
+      ...(mcpServers ? { mcpServers } : {}),
       canUseTool: (toolName, toolInput, opts) => {
         if (isAutoAllowed(toolName)) {
           return Promise.resolve<PermissionResult>({ behavior: "allow" });
