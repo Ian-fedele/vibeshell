@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { formatTokens, type Pane as PaneState } from "./store";
 import type { PermissionDecision } from "./protocol";
 import { Approval } from "./Approval";
+
+const MAX_COMPOSER_HEIGHT = 160;
 
 interface PaneProps {
   pane: PaneState;
@@ -14,18 +16,39 @@ interface PaneProps {
 export function Pane({ pane, onSend, onClose, onRespond, onUndo }: PaneProps) {
   const [input, setInput] = useState("");
   const feedRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const ready = pane.sessionId !== null;
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
   }, [pane.items]);
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  // Grow the composer with its content (up to a cap), then reset when cleared.
+  useEffect(() => {
+    const ta = composerRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, MAX_COMPOSER_HEIGHT)}px`;
+  }, [input]);
+
+  function doSubmit() {
     const text = input.trim();
     if (!text || !ready) return;
     onSend(text);
     setInput("");
+  }
+
+  function onFormSubmit(e: FormEvent) {
+    e.preventDefault();
+    doSubmit();
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Enter sends; Shift+Enter inserts a newline. Ignore IME composition.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      doSubmit();
+    }
   }
 
   return (
@@ -98,12 +121,15 @@ export function Pane({ pane, onSend, onClose, onRespond, onUndo }: PaneProps) {
         />
       )}
 
-      <form className="composer" onSubmit={submit}>
+      <form className="composer" onSubmit={onFormSubmit}>
         <span className="car">›</span>
-        <input
+        <textarea
+          ref={composerRef}
+          rows={1}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={ready ? "Message the agent…" : "Connecting to engine…"}
+          onKeyDown={onKeyDown}
+          placeholder={ready ? "Message the agent…  (Enter to send, Shift+Enter for newline)" : "Connecting to engine…"}
           disabled={!ready}
         />
       </form>

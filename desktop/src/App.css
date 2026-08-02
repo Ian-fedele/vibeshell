@@ -489,7 +489,7 @@ body {
 /* ---- composer ---- */
 .composer {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   padding: 0.6rem 0.85rem;
   border-top: 1px solid var(--border);
@@ -498,17 +498,25 @@ body {
 .composer .car {
   color: var(--accent);
   font-weight: 700;
+  padding-top: 0.05rem;
 }
-.composer input {
+.composer textarea {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
+  resize: none;
   color: var(--text);
   font-family: var(--mono);
   font-size: 0.86rem;
+  line-height: 1.5;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
-.composer input::placeholder {
+.composer textarea::placeholder {
   color: var(--dim);
 }
 
