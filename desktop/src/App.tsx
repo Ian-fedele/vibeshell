@@ -3,7 +3,8 @@ import { useEngine } from "./useEngine";
 import "./App.css";
 
 export default function App() {
-  const { state, addPane, addWorkspace, selectWorkspace, sendMessage, closePane } = useEngine();
+  const { state, addPane, addWorkspace, selectWorkspace, sendMessage, closePane, respondPermission } =
+    useEngine();
   const connected = state.status === "open";
 
   const paneCount = (workspaceId: string) =>
@@ -62,6 +63,7 @@ export default function App() {
                 pane={pane}
                 onSend={(text) => sendMessage(pane.id, text)}
                 onClose={() => closePane(pane.id)}
+                onRespond={(requestId, decision) => respondPermission(pane.id, requestId, decision)}
               />
             ))
           )}

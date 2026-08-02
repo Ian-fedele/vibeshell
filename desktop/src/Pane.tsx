@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Pane as PaneState } from "./store";
+import type { PermissionDecision } from "./protocol";
+import { Approval } from "./Approval";
 
 interface PaneProps {
   pane: PaneState;
   onSend: (text: string) => void;
   onClose: () => void;
+  onRespond: (requestId: string, decision: PermissionDecision) => void;
 }
 
-export function Pane({ pane, onSend, onClose }: PaneProps) {
+export function Pane({ pane, onSend, onClose, onRespond }: PaneProps) {
   const [input, setInput] = useState("");
   const feedRef = useRef<HTMLDivElement | null>(null);
   const ready = pane.sessionId !== null;
@@ -77,6 +80,13 @@ export function Pane({ pane, onSend, onClose }: PaneProps) {
           );
         })}
       </div>
+
+      {pane.pending && (
+        <Approval
+          request={pane.pending}
+          onDecide={(decision) => onRespond(pane.pending!.requestId, decision)}
+        />
+      )}
 
       <form className="composer" onSubmit={submit}>
         <span className="car">›</span>

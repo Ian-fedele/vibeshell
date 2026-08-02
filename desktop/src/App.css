@@ -133,6 +133,100 @@ body {
   font-size: 0.9rem;
 }
 
+/* ---- approval card ---- */
+.approval {
+  margin: 0 0.6rem 0.5rem;
+  border: 1px solid rgba(232, 179, 74, 0.35);
+  border-left: 3px solid #e8b34a;
+  border-radius: 8px;
+  background: rgba(232, 179, 74, 0.06);
+  overflow: hidden;
+}
+.ap-head {
+  padding: 0.5rem 0.7rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  border-bottom: 1px solid rgba(232, 179, 74, 0.2);
+}
+.ap-cmd {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ap-diff {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+.ap-fname {
+  padding: 0.4rem 0.7rem;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+}
+.ap-rows {
+  max-height: 220px;
+  overflow: auto;
+}
+.ap-row {
+  display: grid;
+  grid-template-columns: 1.4ch 1fr;
+  line-height: 1.6;
+}
+.ap-gut {
+  text-align: center;
+  font-weight: 700;
+}
+.ap-src {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-right: 0.6rem;
+}
+.ap-row.add {
+  background: rgba(108, 193, 119, 0.12);
+}
+.ap-row.add .ap-gut {
+  color: var(--good);
+}
+.ap-row.del {
+  background: rgba(229, 106, 108, 0.12);
+}
+.ap-row.del .ap-gut {
+  color: var(--bad);
+}
+.ap-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-top: 1px solid rgba(232, 179, 74, 0.2);
+}
+.ap-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.ap-btn.allow {
+  border-color: var(--good);
+  color: var(--good);
+}
+.ap-btn.always {
+  border-color: #e8b34a;
+  color: #e8b34a;
+}
+.ap-btn.deny {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.ap-btn:hover {
+  filter: brightness(1.25);
+}
+
 .topbar {
   display: flex;
   align-items: center;

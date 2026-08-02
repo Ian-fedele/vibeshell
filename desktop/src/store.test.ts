@@ -98,4 +98,39 @@ describe("session store", () => {
     expect(state.activeWorkspaceId).toBe(WS);
     expect(state.workspaces).toHaveLength(2);
   });
+
+  it("sets a pending approval on permission_request and clears it on decision", () => {
+    const withRequest = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
+      {
+        type: "engine",
+        event: {
+          type: "agent_event",
+          sessionId: "sess_a",
+          event: {
+            type: "permission_request",
+            requestId: "req1",
+            toolName: "Bash",
+            preview: { kind: "bash", command: "ls -la" },
+          },
+        },
+      },
+    ]);
+    expect(withRequest.panes[0]!.pending).toEqual({
+      requestId: "req1",
+      toolName: "Bash",
+      title: undefined,
+      preview: { kind: "bash", command: "ls -la" },
+    });
+
+    const afterDeny = reducer(withRequest, {
+      type: "clear_permission",
+      paneId: "pane_1",
+      decision: { type: "deny" },
+    });
+    expect(afterDeny.panes[0]!.pending).toBeNull();
+    const items = afterDeny.panes[0]!.items;
+    expect(items[items.length - 1]).toEqual({ kind: "notice", text: "✗ denied" });
+  });
 });

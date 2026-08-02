@@ -4,7 +4,7 @@
  * in-process callback. Session ids are engine-assigned; requests correlate via
  * requestId until the id is known.
  */
-import type { AgentEvent } from "../agent/index.js";
+import type { AgentEvent, PermissionDecision } from "../agent/index.js";
 
 /** Front-end → engine. */
 export type ClientCommand =
@@ -16,6 +16,12 @@ export type ClientCommand =
       cwd: string;
     }
   | { type: "send_message"; sessionId: string; text: string }
+  | {
+      type: "permission_response";
+      sessionId: string;
+      requestId: string;
+      decision: PermissionDecision;
+    }
   | { type: "interrupt"; sessionId: string }
   | { type: "close_session"; sessionId: string };
 

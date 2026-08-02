@@ -19,6 +19,7 @@ function makeFake(script: AgentEvent[]): {
       closed = true;
     },
     interrupt: async () => {},
+    respondPermission: () => {},
     events: (async function* () {
       for (const event of script) yield event;
     })(),

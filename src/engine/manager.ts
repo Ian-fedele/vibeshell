@@ -49,6 +49,9 @@ export class SessionManager {
         case "send_message":
           this.require(cmd.sessionId).send(cmd.text);
           return;
+        case "permission_response":
+          this.require(cmd.sessionId).respondPermission(cmd.requestId, cmd.decision);
+          return;
         case "interrupt":
           this.require(cmd.sessionId)
             .interrupt()

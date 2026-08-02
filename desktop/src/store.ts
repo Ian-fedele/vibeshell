@@ -4,9 +4,16 @@
  * a stable local id, also used as the create_session requestId). Kept pure so
  * the routing logic is easy to reason about and test.
  */
-import type { AgentEvent, EngineEvent } from "./protocol";
+import type { AgentEvent, EngineEvent, PermissionDecision, ToolPreview } from "./protocol";
 
 export type ConnectionStatus = "connecting" | "open" | "closed";
+
+export interface PermissionRequest {
+  requestId: string;
+  toolName: string;
+  title?: string;
+  preview: ToolPreview;
+}
 
 export type FeedItem =
   | { kind: "user"; text: string }
@@ -22,6 +29,7 @@ export interface Pane {
   title: string;
   items: FeedItem[];
   cost: number;
+  pending: PermissionRequest | null;
 }
 
 export interface Workspace {
@@ -44,6 +52,7 @@ export type Action =
   | { type: "add_pane"; paneId: string; workspaceId: string; title: string }
   | { type: "close_pane"; paneId: string }
   | { type: "user_message"; paneId: string; text: string }
+  | { type: "clear_permission"; paneId: string; decision: PermissionDecision }
   | { type: "engine"; event: EngineEvent };
 
 export const DEFAULT_WORKSPACE_ID = "ws_1";
@@ -71,6 +80,17 @@ function appendAssistant(items: FeedItem[], text: string): FeedItem[] {
 function applyAgentEvent(pane: Pane, event: AgentEvent): Pane {
   if (event.type === "text") return { ...pane, items: appendAssistant(pane.items, event.text) };
   if (event.type === "tool") return { ...pane, items: [...pane.items, { kind: "tool", name: event.name }] };
+  if (event.type === "permission_request") {
+    return {
+      ...pane,
+      pending: {
+        requestId: event.requestId,
+        toolName: event.toolName,
+        title: event.title,
+        preview: event.preview,
+      },
+    };
+  }
   return {
     ...pane,
     items: [...pane.items, { kind: "result", ...event }],
@@ -123,7 +143,12 @@ export function reducer(state: State, action: Action): State {
           bySession: {},
           panes: state.panes.map((p) =>
             p.sessionId
-              ? { ...p, sessionId: null, items: [...p.items, { kind: "notice", text: "disconnected — reconnecting…" }] }
+              ? {
+                  ...p,
+                  sessionId: null,
+                  pending: null,
+                  items: [...p.items, { kind: "notice", text: "disconnected — reconnecting…" }],
+                }
               : p,
           ),
         };
@@ -150,6 +175,7 @@ export function reducer(state: State, action: Action): State {
             title: action.title,
             items: [],
             cost: 0,
+            pending: null,
           },
         ],
       };
@@ -163,6 +189,18 @@ export function reducer(state: State, action: Action): State {
       return updatePane(state, action.paneId, (p) => ({
         ...p,
         items: [...p.items, { kind: "user", text: action.text }],
+      }));
+    case "clear_permission":
+      return updatePane(state, action.paneId, (p) => ({
+        ...p,
+        pending: null,
+        items: [
+          ...p.items,
+          {
+            kind: "notice",
+            text: action.decision.type === "deny" ? "✗ denied" : "✓ approved",
+          },
+        ],
       }));
     case "engine":
       return applyEngineEvent(state, action.event);

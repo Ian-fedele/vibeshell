@@ -21,6 +21,10 @@ function render(event: AgentEvent, cost: { usd: number }): boolean {
     case "tool":
       stdout.write(dim(`\n[${event.name}] `));
       return false;
+    case "permission_request":
+      // Handled (auto-approved) in the loop before render; shown for context.
+      stdout.write(dim(`\n[auto-approving ${event.toolName}] `));
+      return false;
     case "result": {
       stdout.write("\n");
       if (event.ok) {
@@ -92,6 +96,10 @@ async function main(): Promise<void> {
   }
 
   for await (const event of session.events) {
+    if (event.type === "permission_request") {
+      // Dev harness: auto-approve so tool-using turns don't block.
+      session.respondPermission(event.requestId, { type: "allow" });
+    }
     if (render(event, cost)) {
       if (!(await promptForTurn())) break;
     }

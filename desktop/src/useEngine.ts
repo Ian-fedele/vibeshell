@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { EngineClient } from "./engine";
+import type { PermissionDecision } from "./protocol";
 import { initialState, reducer, type State } from "./store";
 
 const MODEL = "claude-opus-5";
@@ -67,6 +68,16 @@ export function useEngine() {
     dispatch({ type: "close_pane", paneId });
   }, []);
 
+  const respondPermission = useCallback(
+    (paneId: string, requestId: string, decision: PermissionDecision) => {
+      const pane = stateRef.current.panes.find((p) => p.id === paneId);
+      if (!pane?.sessionId) return;
+      clientRef.current?.send({ type: "permission_response", sessionId: pane.sessionId, requestId, decision });
+      dispatch({ type: "clear_permission", paneId, decision });
+    },
+    [],
+  );
+
   // Connect once, open the first pane.
   useEffect(() => {
     if (clientRef.current) return; // guard StrictMode double-invoke
@@ -86,5 +97,5 @@ export function useEngine() {
     prevStatus.current = state.status;
   }, [state.status, createSession]);
 
-  return { state, addPane, addWorkspace, selectWorkspace, sendMessage, closePane };
+  return { state, addPane, addWorkspace, selectWorkspace, sendMessage, closePane, respondPermission };
 }
