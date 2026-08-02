@@ -37,6 +37,7 @@ export function Pane({ pane, onSend, onClose, onRespond, onUndo }: PaneProps) {
           <i />
         </span>
         <span className="pane-name">{pane.title}</span>
+        {pane.branch && <span className="pane-branch" title="Isolated worktree branch">⑂ {pane.branch}</span>}
         <button
           className="pane-undo"
           onClick={onUndo}

@@ -21,7 +21,14 @@ export type AgentEvent =
   | { type: "result"; ok: boolean; durationMs: number; tokens: number; reason?: string };
 
 export type ClientCommand =
-  | { type: "create_session"; requestId: string; provider: string; model: string; cwd: string }
+  | {
+      type: "create_session";
+      requestId: string;
+      provider: string;
+      model: string;
+      cwd: string;
+      worktree?: boolean;
+    }
   | { type: "send_message"; sessionId: string; text: string }
   | { type: "permission_response"; sessionId: string; requestId: string; decision: PermissionDecision }
   | { type: "undo"; sessionId: string }
@@ -29,7 +36,7 @@ export type ClientCommand =
   | { type: "close_session"; sessionId: string };
 
 export type EngineEvent =
-  | { type: "session_created"; requestId: string; sessionId: string }
+  | { type: "session_created"; requestId: string; sessionId: string; branch?: string }
   | { type: "agent_event"; sessionId: string; event: AgentEvent }
   | { type: "checkpoint"; sessionId: string; available: boolean }
   | { type: "session_closed"; sessionId: string }

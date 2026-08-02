@@ -36,6 +36,7 @@ export interface Pane {
   tokens: number;
   pending: PermissionRequest | null;
   canUndo: boolean;
+  branch: string | null;
 }
 
 export interface Workspace {
@@ -46,6 +47,7 @@ export interface Workspace {
 export interface State {
   status: ConnectionStatus;
   model: string;
+  isolate: boolean;
   workspaces: Workspace[];
   activeWorkspaceId: string;
   panes: Pane[];
@@ -55,6 +57,7 @@ export interface State {
 export type Action =
   | { type: "status"; status: ConnectionStatus }
   | { type: "set_model"; model: string }
+  | { type: "set_isolate"; isolate: boolean }
   | { type: "add_workspace"; workspaceId: string; name: string }
   | { type: "select_workspace"; workspaceId: string }
   | { type: "rename_workspace"; workspaceId: string; name: string }
@@ -74,6 +77,7 @@ export const MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"] a
 export const initialState: State = {
   status: "connecting",
   model: DEFAULT_MODEL,
+  isolate: false,
   workspaces: [{ id: DEFAULT_WORKSPACE_ID, name: "Workspace 1" }],
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   panes: [],
@@ -121,7 +125,7 @@ function applyEngineEvent(state: State, event: EngineEvent): State {
       return updatePane(
         { ...state, bySession: { ...state.bySession, [event.sessionId]: pane.id } },
         pane.id,
-        (p) => ({ ...p, sessionId: event.sessionId }),
+        (p) => ({ ...p, sessionId: event.sessionId, branch: event.branch ?? p.branch }),
       );
     }
     case "agent_event": {
@@ -178,6 +182,8 @@ export function reducer(state: State, action: Action): State {
     }
     case "set_model":
       return { ...state, model: action.model };
+    case "set_isolate":
+      return { ...state, isolate: action.isolate };
     case "add_workspace":
       return {
         ...state,
@@ -228,6 +234,7 @@ export function reducer(state: State, action: Action): State {
             tokens: 0,
             pending: null,
             canUndo: false,
+            branch: null,
           },
         ],
       };

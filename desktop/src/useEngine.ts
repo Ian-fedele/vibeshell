@@ -30,6 +30,7 @@ export function useEngine() {
       provider: PROVIDER,
       model: stateRef.current.model,
       cwd: ".",
+      worktree: stateRef.current.isolate,
     });
   }, []);
 
@@ -70,6 +71,10 @@ export function useEngine() {
 
   const setModel = useCallback((model: string) => {
     dispatch({ type: "set_model", model });
+  }, []);
+
+  const setIsolate = useCallback((isolate: boolean) => {
+    dispatch({ type: "set_isolate", isolate });
   }, []);
 
   const sendMessage = useCallback((paneId: string, text: string) => {
@@ -129,6 +134,7 @@ export function useEngine() {
     renameWorkspace,
     deleteWorkspace,
     setModel,
+    setIsolate,
     sendMessage,
     closePane,
     respondPermission,

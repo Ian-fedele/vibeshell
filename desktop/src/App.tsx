@@ -13,6 +13,7 @@ export default function App() {
     renameWorkspace,
     deleteWorkspace,
     setModel,
+    setIsolate,
     sendMessage,
     closePane,
     respondPermission,
@@ -71,6 +72,14 @@ export default function App() {
             ))}
           </select>
           <span className="spacer" />
+          <label className="isolate-toggle" title="Run new sessions in an isolated git worktree + branch">
+            <input
+              type="checkbox"
+              checked={state.isolate}
+              onChange={(e) => setIsolate(e.target.checked)}
+            />
+            isolate
+          </label>
           <span className={`conn ${state.status}`}>
             <span className={`dot ${state.status}`} /> {connected ? "engine connected" : state.status}
           </span>

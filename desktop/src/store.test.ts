@@ -143,6 +143,26 @@ describe("session store", () => {
     expect(state.model).toBe("claude-sonnet-5");
   });
 
+  it("set_isolate toggles worktree isolation for new sessions", () => {
+    expect(run([{ type: "set_isolate", isolate: true }]).isolate).toBe(true);
+  });
+
+  it("records the worktree branch from session_created", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      {
+        type: "engine",
+        event: {
+          type: "session_created",
+          requestId: "pane_1",
+          sessionId: "sess_a",
+          branch: "vibeshell/sess_a",
+        },
+      },
+    ]);
+    expect(state.panes[0]!.branch).toBe("vibeshell/sess_a");
+  });
+
   it("sets a pending approval on permission_request and clears it on decision", () => {
     const withRequest = run([
       { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },

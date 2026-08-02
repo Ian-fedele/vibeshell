@@ -177,6 +177,31 @@ body {
   padding: 0.2rem 0.4rem;
   cursor: pointer;
 }
+.isolate-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+  color: var(--dim);
+  cursor: pointer;
+  user-select: none;
+}
+.isolate-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.pane-branch {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--accent);
+  background: rgba(79, 209, 197, 0.1);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
 
 /* ---- empty workspace ---- */
 .empty {
