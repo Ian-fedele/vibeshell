@@ -34,17 +34,20 @@ export function toAgentEvents(msg: SDKMessage): AgentEvent[] {
       }
       return events;
     }
-    case "result":
-      return msg.subtype === "success"
-        ? [
-            {
-              type: "result",
-              ok: true,
-              durationMs: msg.duration_ms,
-              costUsd: msg.total_cost_usd,
-            },
-          ]
-        : [{ type: "result", ok: false, durationMs: 0, costUsd: 0, reason: msg.subtype }];
+    case "result": {
+      if (msg.subtype !== "success") {
+        return [
+          { type: "result", ok: false, durationMs: 0, tokens: 0, reason: msg.subtype },
+        ];
+      }
+      const u = msg.usage;
+      const tokens =
+        u.input_tokens +
+        u.output_tokens +
+        (u.cache_read_input_tokens ?? 0) +
+        (u.cache_creation_input_tokens ?? 0);
+      return [{ type: "result", ok: true, durationMs: msg.duration_ms, tokens }];
+    }
     default:
       return [];
   }
@@ -120,7 +123,7 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
         type: "result",
         ok: false,
         durationMs: 0,
-        costUsd: 0,
+        tokens: 0,
         reason: err instanceof Error ? err.message : String(err),
       });
     } finally {

@@ -13,7 +13,7 @@ const DEFAULT_MODEL = "claude-opus-5";
 const dim = (s: string): string => `\x1b[2m${s}\x1b[0m`;
 
 /** Render one normalized event. Returns true when the turn is complete. */
-function render(event: AgentEvent, cost: { usd: number }): boolean {
+function render(event: AgentEvent, cost: { tokens: number }): boolean {
   switch (event.type) {
     case "text":
       stdout.write(event.text);
@@ -28,12 +28,12 @@ function render(event: AgentEvent, cost: { usd: number }): boolean {
     case "result": {
       stdout.write("\n");
       if (event.ok) {
-        cost.usd += event.costUsd;
+        cost.tokens += event.tokens;
         stdout.write(
           dim(
             `— ${(event.durationMs / 1000).toFixed(1)}s · ` +
-              `$${event.costUsd.toFixed(4)} this turn · ` +
-              `$${cost.usd.toFixed(4)} session`,
+              `${event.tokens} tok this turn · ` +
+              `${cost.tokens} tok session`,
           ) + "\n",
         );
       } else {
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
     cwd: process.cwd(),
   });
   const rl = readline.createInterface({ input: stdin, output: stdout });
-  const cost = { usd: 0 };
+  const cost = { tokens: 0 };
 
   // EOF (Ctrl+D / end of piped input) closes readline; treat it as /exit.
   let closed = false;

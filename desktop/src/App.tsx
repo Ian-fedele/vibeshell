@@ -1,5 +1,6 @@
 import { Pane } from "./Pane";
 import { useEngine } from "./useEngine";
+import { formatTokens } from "./store";
 import "./App.css";
 
 export default function App() {
@@ -12,7 +13,7 @@ export default function App() {
 
   const activePanes = state.panes.filter((p) => p.workspaceId === state.activeWorkspaceId);
   const activeWorkspace = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
-  const workspaceCost = activePanes.reduce((sum, p) => sum + p.cost, 0);
+  const workspaceTokens = activePanes.reduce((sum, p) => sum + p.tokens, 0);
 
   return (
     <div className="app">
@@ -47,7 +48,7 @@ export default function App() {
           <span className={`conn ${state.status}`}>
             <span className={`dot ${state.status}`} /> {connected ? "engine connected" : state.status}
           </span>
-          <span className="total-cost">${workspaceCost.toFixed(4)}</span>
+          <span className="total-cost">{formatTokens(workspaceTokens)} tok</span>
           <button className="new-session" onClick={addPane} disabled={!connected}>
             + New session
           </button>

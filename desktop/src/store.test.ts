@@ -32,7 +32,7 @@ describe("session store", () => {
     expect(state.panes[1]!.items).toEqual([{ kind: "assistant", text: "hi" }]);
   });
 
-  it("accumulates streamed text and per-pane cost", () => {
+  it("accumulates streamed text and per-pane tokens", () => {
     const state = run([
       { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
       { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
@@ -43,13 +43,13 @@ describe("session store", () => {
         event: {
           type: "agent_event",
           sessionId: "sess_a",
-          event: { type: "result", ok: true, durationMs: 1000, costUsd: 0.02 },
+          event: { type: "result", ok: true, durationMs: 1000, tokens: 1200 },
         },
       },
     ]);
     const pane = state.panes[0]!;
     expect(pane.items[0]).toEqual({ kind: "assistant", text: "hello" });
-    expect(pane.cost).toBeCloseTo(0.02);
+    expect(pane.tokens).toBe(1200);
   });
 
   it("on disconnect clears session ids and notes it, so reconnect can recreate", () => {

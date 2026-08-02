@@ -18,7 +18,7 @@ export type AgentEvent =
   | { type: "text"; text: string }
   | { type: "tool"; name: string }
   | { type: "permission_request"; requestId: string; toolName: string; title?: string; preview: ToolPreview }
-  | { type: "result"; ok: boolean; durationMs: number; costUsd: number; reason?: string };
+  | { type: "result"; ok: boolean; durationMs: number; tokens: number; reason?: string };
 
 export type ClientCommand =
   | { type: "create_session"; requestId: string; provider: string; model: string; cwd: string }

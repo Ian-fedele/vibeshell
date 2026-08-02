@@ -31,7 +31,7 @@ export type AgentEvent =
       title?: string;
       preview: ToolPreview;
     }
-  | { type: "result"; ok: boolean; durationMs: number; costUsd: number; reason?: string };
+  | { type: "result"; ok: boolean; durationMs: number; tokens: number; reason?: string };
 
 export interface AgentSession {
   /** Submit a user turn. */

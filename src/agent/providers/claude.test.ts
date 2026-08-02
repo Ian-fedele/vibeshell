@@ -24,24 +24,29 @@ describe("toAgentEvents", () => {
     ]);
   });
 
-  it("maps a success result to duration and cost", () => {
+  it("maps a success result to duration and total tokens", () => {
     const events = toAgentEvents(
       asMsg({
         type: "result",
         subtype: "success",
         duration_ms: 3200,
-        total_cost_usd: 0.0114,
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 200,
+          cache_read_input_tokens: 50,
+          cache_creation_input_tokens: 10,
+        },
       }),
     );
     expect(events).toEqual([
-      { type: "result", ok: true, durationMs: 3200, costUsd: 0.0114 },
+      { type: "result", ok: true, durationMs: 3200, tokens: 1260 },
     ]);
   });
 
   it("maps an error result to a reason", () => {
     const events = toAgentEvents(asMsg({ type: "result", subtype: "error_max_turns" }));
     expect(events).toEqual([
-      { type: "result", ok: false, durationMs: 0, costUsd: 0, reason: "error_max_turns" },
+      { type: "result", ok: false, durationMs: 0, tokens: 0, reason: "error_max_turns" },
     ]);
   });
 

@@ -34,7 +34,7 @@ describe("SessionManager", () => {
     const finished = new Promise<void>((r) => (resolve = r));
     const script: AgentEvent[] = [
       { type: "text", text: "hi" },
-      { type: "result", ok: true, durationMs: 1000, costUsd: 0.01 },
+      { type: "result", ok: true, durationMs: 1000, tokens: 1200 },
     ];
     const createSession: CreateSessionFn = () => makeFake(script).session;
     const mgr = new SessionManager({

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Pane as PaneState } from "./store";
+import { formatTokens, type Pane as PaneState } from "./store";
 import type { PermissionDecision } from "./protocol";
 import { Approval } from "./Approval";
 
@@ -74,7 +74,7 @@ export function Pane({ pane, onSend, onClose, onRespond }: PaneProps) {
           return (
             <div className="row result" key={i}>
               {item.ok
-                ? `— ${(item.durationMs / 1000).toFixed(1)}s · $${item.costUsd.toFixed(4)} this turn`
+                ? `— ${(item.durationMs / 1000).toFixed(1)}s · ${formatTokens(item.tokens)} tokens`
                 : `— ${item.reason ?? "error"}`}
             </div>
           );
@@ -102,7 +102,7 @@ export function Pane({ pane, onSend, onClose, onRespond }: PaneProps) {
         <span className={`dot ${ready ? "open" : "connecting"}`} />
         <span className="model">claude-opus-5</span>
         <span className="spacer" />
-        <span className="cost">${pane.cost.toFixed(4)}</span>
+        <span className="cost">{formatTokens(pane.tokens)} tok</span>
       </div>
     </section>
   );

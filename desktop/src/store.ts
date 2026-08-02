@@ -19,8 +19,13 @@ export type FeedItem =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string }
   | { kind: "tool"; name: string }
-  | { kind: "result"; ok: boolean; durationMs: number; costUsd: number; reason?: string }
+  | { kind: "result"; ok: boolean; durationMs: number; tokens: number; reason?: string }
   | { kind: "notice"; text: string };
+
+/** Compact token display, e.g. 342 → "342", 1260 → "1.3k". */
+export function formatTokens(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
 
 export interface Pane {
   id: string;
@@ -28,7 +33,7 @@ export interface Pane {
   sessionId: string | null;
   title: string;
   items: FeedItem[];
-  cost: number;
+  tokens: number;
   pending: PermissionRequest | null;
 }
 
@@ -94,7 +99,7 @@ function applyAgentEvent(pane: Pane, event: AgentEvent): Pane {
   return {
     ...pane,
     items: [...pane.items, { kind: "result", ...event }],
-    cost: pane.cost + (event.ok ? event.costUsd : 0),
+    tokens: pane.tokens + (event.ok ? event.tokens : 0),
   };
 }
 
@@ -174,7 +179,7 @@ export function reducer(state: State, action: Action): State {
             sessionId: null,
             title: action.title,
             items: [],
-            cost: 0,
+            tokens: 0,
             pending: null,
           },
         ],
