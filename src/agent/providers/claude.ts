@@ -17,13 +17,13 @@ import {
 import { createInputPump } from "../inputPump.js";
 import { loadMcpServers } from "./mcp.js";
 import { loadAgents } from "./agents.js";
+import { buildPreview, isAutoAllowed } from "../permissions.js";
 import type {
   AgentEvent,
   AgentProvider,
   AgentSession,
   AgentSessionOptions,
   PermissionDecision,
-  ToolPreview,
 } from "../types.js";
 
 /** Map one SDK message to zero or more normalized events. Pure — unit-tested. */
@@ -45,6 +45,15 @@ export function toAgentEvents(msg: SDKMessage): AgentEvent[] {
         ];
       }
       const u = msg.usage;
+      // Conversation size after this turn, NOT tokens newly spent. The three
+      // input fields partition the prompt the API actually received
+      // (input_tokens is only the uncached remainder), and output is appended
+      // to history, so the sum is what the model is holding.
+      //
+      // This is a gauge — the consumer must assign it, never accumulate it.
+      // Summing it across turns re-counts the whole prefix once per turn, and
+      // the prefix dominates: a trivial "say hi" session already carries ~12k
+      // tokens of system prompt and tool schemas before any user content.
       const tokens =
         u.input_tokens +
         u.output_tokens +
@@ -55,46 +64,6 @@ export function toAgentEvents(msg: SDKMessage): AgentEvent[] {
     default:
       return [];
   }
-}
-
-/** Build an approval preview from a tool call. Pure — unit-tested. */
-export function buildPreview(
-  toolName: string,
-  input: Record<string, unknown>,
-): ToolPreview {
-  const str = (v: unknown): string => (typeof v === "string" ? v : "");
-  switch (toolName) {
-    case "Edit":
-      return {
-        kind: "edit",
-        path: str(input.file_path),
-        before: str(input.old_string),
-        after: str(input.new_string),
-      };
-    case "Write":
-      return { kind: "write", path: str(input.file_path), content: str(input.content) };
-    case "Bash":
-      return { kind: "bash", command: str(input.command) };
-    default:
-      return {
-        kind: "other",
-        summary: `${toolName} ${JSON.stringify(input).slice(0, 200)}`,
-      };
-  }
-}
-
-/** Tools that only read state — auto-approved, so they never prompt. */
-const READ_ONLY_TOOLS = new Set([
-  "Read",
-  "Glob",
-  "Grep",
-  "LS",
-  "NotebookRead",
-  "TodoWrite",
-]);
-
-export function isAutoAllowed(toolName: string): boolean {
-  return READ_ONLY_TOOLS.has(toolName);
 }
 
 interface Pending {

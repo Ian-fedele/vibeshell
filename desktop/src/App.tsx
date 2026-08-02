@@ -3,7 +3,7 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { Pane } from "./Pane";
 import { WorkspaceItem } from "./WorkspaceItem";
 import { useEngine } from "./useEngine";
-import { formatTokens, MODELS, type Pane as PaneState } from "./store";
+import { formatTokens, MODELS_BY_PROVIDER, PROVIDERS, type Pane as PaneState } from "./store";
 import "./App.css";
 
 const COLUMNS = 2;
@@ -47,6 +47,7 @@ export default function App() {
     selectWorkspace,
     renameWorkspace,
     deleteWorkspace,
+    setProvider,
     setModel,
     setIsolate,
     sendMessage,
@@ -106,11 +107,23 @@ export default function App() {
           <span className="crumb">{activeWorkspace?.name ?? "Workspace"}</span>
           <select
             className="model-select"
+            value={state.provider}
+            onChange={(e) => setProvider(e.target.value)}
+            title="Provider for new sessions"
+          >
+            {PROVIDERS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <select
+            className="model-select"
             value={state.model}
             onChange={(e) => setModel(e.target.value)}
             title="Model for new sessions"
           >
-            {MODELS.map((m) => (
+            {(MODELS_BY_PROVIDER[state.provider] ?? []).map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>

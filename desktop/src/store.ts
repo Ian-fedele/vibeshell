@@ -46,6 +46,7 @@ export interface Workspace {
 
 export interface State {
   status: ConnectionStatus;
+  provider: string;
   model: string;
   isolate: boolean;
   workspaces: Workspace[];
@@ -56,6 +57,7 @@ export interface State {
 
 export type Action =
   | { type: "status"; status: ConnectionStatus }
+  | { type: "set_provider"; provider: string }
   | { type: "set_model"; model: string }
   | { type: "set_isolate"; isolate: boolean }
   | { type: "add_workspace"; workspaceId: string; name: string }
@@ -70,12 +72,20 @@ export type Action =
   | { type: "engine"; event: EngineEvent };
 
 export const DEFAULT_WORKSPACE_ID = "ws_1";
-export const DEFAULT_MODEL = "claude-opus-5";
 
-export const MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"] as const;
+export const PROVIDERS = ["claude", "grok"] as const;
+
+export const MODELS_BY_PROVIDER: Record<string, readonly string[]> = {
+  claude: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  grok: ["grok-4", "grok-code-fast-1", "grok-3"],
+};
+
+export const DEFAULT_PROVIDER = "claude";
+export const DEFAULT_MODEL = MODELS_BY_PROVIDER[DEFAULT_PROVIDER]![0]!;
 
 export const initialState: State = {
   status: "connecting",
+  provider: DEFAULT_PROVIDER,
   model: DEFAULT_MODEL,
   isolate: false,
   workspaces: [{ id: DEFAULT_WORKSPACE_ID, name: "Workspace 1" }],
@@ -113,7 +123,10 @@ function applyAgentEvent(pane: Pane, event: AgentEvent): Pane {
   return {
     ...pane,
     items: [...pane.items, { kind: "result", ...event }],
-    tokens: pane.tokens + (event.ok ? event.tokens : 0),
+    // Assigned, not accumulated: event.tokens is the conversation's current
+    // size, so each result supersedes the last. A failed turn leaves the
+    // previous reading in place rather than reporting an empty context.
+    tokens: event.ok ? event.tokens : pane.tokens,
   };
 }
 
@@ -179,6 +192,10 @@ export function reducer(state: State, action: Action): State {
         };
       }
       return { ...state, status: action.status };
+    }
+    case "set_provider": {
+      const model = MODELS_BY_PROVIDER[action.provider]?.[0] ?? state.model;
+      return { ...state, provider: action.provider, model };
     }
     case "set_model":
       return { ...state, model: action.model };

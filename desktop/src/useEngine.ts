@@ -9,8 +9,6 @@ import { EngineClient } from "./engine";
 import type { PermissionDecision } from "./protocol";
 import { initialState, reducer, type State } from "./store";
 
-const PROVIDER = "claude";
-
 let paneCounter = 0;
 let workspaceCounter = 1; // Workspace 1 exists in initialState
 const nextPaneId = (): string => `pane_${++paneCounter}`;
@@ -27,7 +25,7 @@ export function useEngine() {
     clientRef.current?.send({
       type: "create_session",
       requestId: paneId,
-      provider: PROVIDER,
+      provider: stateRef.current.provider,
       model: stateRef.current.model,
       cwd: ".",
       worktree: stateRef.current.isolate,
@@ -67,6 +65,10 @@ export function useEngine() {
       if (pane.sessionId) clientRef.current?.send({ type: "close_session", sessionId: pane.sessionId });
     }
     dispatch({ type: "delete_workspace", workspaceId });
+  }, []);
+
+  const setProvider = useCallback((provider: string) => {
+    dispatch({ type: "set_provider", provider });
   }, []);
 
   const setModel = useCallback((model: string) => {
@@ -133,6 +135,7 @@ export function useEngine() {
     selectWorkspace,
     renameWorkspace,
     deleteWorkspace,
+    setProvider,
     setModel,
     setIsolate,
     sendMessage,

@@ -3,12 +3,14 @@
  * (e.g. OpenAI) means registering its adapter, with no change to the UI.
  */
 import { claudeProvider } from "./providers/claude.js";
+import { grokProvider } from "./providers/grok.js";
 import type { AgentProvider, AgentSession, AgentSessionOptions } from "./types.js";
 
 export * from "./types.js";
 
 const providers: Record<string, AgentProvider> = {
   [claudeProvider.id]: claudeProvider,
+  [grokProvider.id]: grokProvider,
 };
 
 export function getProvider(id: string): AgentProvider {

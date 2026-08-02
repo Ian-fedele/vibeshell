@@ -52,6 +52,52 @@ describe("session store", () => {
     expect(pane.tokens).toBe(1200);
   });
 
+  it("replaces pane tokens each turn instead of summing them", () => {
+    // result.tokens is conversation size, not turn spend. Summing would
+    // re-count the cached prefix every turn — three turns of a small chat
+    // reported millions of tokens.
+    const result = (tokens: number) => ({
+      type: "engine" as const,
+      event: {
+        type: "agent_event" as const,
+        sessionId: "sess_a",
+        event: { type: "result" as const, ok: true, durationMs: 1000, tokens },
+      },
+    });
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
+      result(12_000),
+      result(12_400),
+      result(12_950),
+    ]);
+    expect(state.panes[0]!.tokens).toBe(12_950);
+  });
+
+  it("keeps the last known size when a turn fails", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
+      {
+        type: "engine",
+        event: {
+          type: "agent_event",
+          sessionId: "sess_a",
+          event: { type: "result", ok: true, durationMs: 1000, tokens: 12_000 },
+        },
+      },
+      {
+        type: "engine",
+        event: {
+          type: "agent_event",
+          sessionId: "sess_a",
+          event: { type: "result", ok: false, durationMs: 0, tokens: 0, reason: "error_max_turns" },
+        },
+      },
+    ]);
+    expect(state.panes[0]!.tokens).toBe(12_000);
+  });
+
   it("on disconnect clears session ids and notes it, so reconnect can recreate", () => {
     const state = run([
       { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
@@ -145,6 +191,12 @@ describe("session store", () => {
 
   it("set_isolate toggles worktree isolation for new sessions", () => {
     expect(run([{ type: "set_isolate", isolate: true }]).isolate).toBe(true);
+  });
+
+  it("set_provider switches provider and resets model to that provider's default", () => {
+    const state = run([{ type: "set_provider", provider: "grok" }]);
+    expect(state.provider).toBe("grok");
+    expect(state.model).toBe("grok-4");
   });
 
   it("records the worktree branch from session_created", () => {

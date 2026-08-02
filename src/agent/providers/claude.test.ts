@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { isAutoAllowed, toAgentEvents } from "./claude.js";
+import { toAgentEvents } from "./claude.js";
+import { isAutoAllowed } from "../permissions.js";
 
 // The SDKMessage union is large; build minimal shapes and assert the mapping.
 const asMsg = (o: unknown): SDKMessage => o as SDKMessage;
@@ -24,7 +25,7 @@ describe("toAgentEvents", () => {
     ]);
   });
 
-  it("maps a success result to duration and total tokens", () => {
+  it("maps a success result to duration and conversation size", () => {
     const events = toAgentEvents(
       asMsg({
         type: "result",
