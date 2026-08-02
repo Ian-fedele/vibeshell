@@ -27,6 +27,7 @@ Three parts (see `agentic-dev-env-roadmap.md` for the full picture):
 - [Rust](https://rustup.rs) (for the Tauri shell) — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 - Xcode Command Line Tools (macOS) / the [Tauri system deps](https://v2.tauri.app/start/prerequisites/) for your OS
 - `export ANTHROPIC_API_KEY=sk-ant-...` (or sign in via `claude` / the Claude Agent SDK's auth)
+- For the Grok provider: `export XAI_API_KEY=xai-...` (a developer key from console.x.ai — separate from a SuperGrok/X consumer subscription)
 
 ### Run the desktop app
 
@@ -71,6 +72,10 @@ MCP tool calls go through the same approval prompt as any other gated tool.
 **Custom slash commands.** A `<name>.md` under `.vibeshell/commands/` (or `.claude/commands/`) becomes `/name`. Sending `/name args` expands the template (`$ARGUMENTS` → your args) before the agent sees it.
 
 **Subagents.** A `<name>.md` under `.vibeshell/agents/` (frontmatter `description` / optional `tools`, `model`; body is the system prompt) becomes a subagent the main agent can delegate to.
+
+## Providers
+
+Pick a provider in the top bar. **Claude** (default) runs on the Claude Agent SDK. **Grok** (xAI) runs on our own agent loop against xAI's OpenAI-compatible API (`XAI_API_KEY`) — useful as a fallback when Claude is rate-limited. Both go through the same approval, undo, and worktree layers. Every layer above the provider is provider-agnostic, so adding another backend is one adapter file behind `src/agent/providers/`.
 
 ## Self-hosted development (building vibeshell in vibeshell)
 
