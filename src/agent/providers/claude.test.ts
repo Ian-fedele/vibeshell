@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { toAgentEvents } from "./claude.js";
+import { isAutoAllowed, toAgentEvents } from "./claude.js";
 
 // The SDKMessage union is large; build minimal shapes and assert the mapping.
 const asMsg = (o: unknown): SDKMessage => o as SDKMessage;
@@ -52,5 +52,10 @@ describe("toAgentEvents", () => {
 
   it("ignores unrelated message types", () => {
     expect(toAgentEvents(asMsg({ type: "system" }))).toEqual([]);
+  });
+
+  it("auto-allows read-only tools but gates writes and bash", () => {
+    for (const t of ["Read", "Glob", "Grep", "LS"]) expect(isAutoAllowed(t)).toBe(true);
+    for (const t of ["Edit", "Write", "Bash"]) expect(isAutoAllowed(t)).toBe(false);
   });
 });

@@ -79,6 +79,20 @@ export function buildPreview(
   }
 }
 
+/** Tools that only read state — auto-approved, so they never prompt. */
+const READ_ONLY_TOOLS = new Set([
+  "Read",
+  "Glob",
+  "Grep",
+  "LS",
+  "NotebookRead",
+  "TodoWrite",
+]);
+
+export function isAutoAllowed(toolName: string): boolean {
+  return READ_ONLY_TOOLS.has(toolName);
+}
+
 interface Pending {
   resolve: (result: PermissionResult) => void;
   suggestions?: PermissionUpdate[];
@@ -98,8 +112,11 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
       // only gate; "default" mode routes gated tools through canUseTool.
       settingSources: [],
       permissionMode: "default",
-      canUseTool: (toolName, toolInput, opts) =>
-        new Promise<PermissionResult>((resolve) => {
+      canUseTool: (toolName, toolInput, opts) => {
+        if (isAutoAllowed(toolName)) {
+          return Promise.resolve<PermissionResult>({ behavior: "allow" });
+        }
+        return new Promise<PermissionResult>((resolve) => {
           pending.set(opts.toolUseID, { resolve, suggestions: opts.suggestions });
           output.push({
             type: "permission_request",
@@ -108,7 +125,8 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
             title: opts.title,
             preview: buildPreview(toolName, toolInput),
           });
-        }),
+        });
+      },
     },
   });
 
