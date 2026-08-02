@@ -14,6 +14,8 @@ export type ClientCommand =
       provider: string;
       model: string;
       cwd: string;
+      /** Run this session in an isolated git worktree + branch. */
+      worktree?: boolean;
     }
   | { type: "send_message"; sessionId: string; text: string }
   | {
@@ -28,7 +30,7 @@ export type ClientCommand =
 
 /** Engine → front-end. */
 export type EngineEvent =
-  | { type: "session_created"; requestId: string; sessionId: string }
+  | { type: "session_created"; requestId: string; sessionId: string; branch?: string }
   | { type: "agent_event"; sessionId: string; event: AgentEvent }
   | { type: "checkpoint"; sessionId: string; available: boolean }
   | { type: "session_closed"; sessionId: string }

@@ -11,6 +11,7 @@ import {
 } from "../agent/index.js";
 import { gitCheckpointer, type Checkpointer } from "./checkpoint.js";
 import { loadCommands, expandCommand, type Commands } from "./commands.js";
+import { createWorktree, removeWorktree, type Worktree } from "./worktree.js";
 import type { ClientCommand, EngineEvent } from "./protocol.js";
 
 export type CreateSessionFn = (
@@ -32,6 +33,7 @@ interface SessionEntry {
   cwd: string;
   checkpoint: string | null;
   commands: Commands;
+  worktree?: Worktree;
 }
 
 export class SessionManager {
@@ -52,6 +54,10 @@ export class SessionManager {
     try {
       switch (cmd.type) {
         case "create_session": {
+          if (cmd.worktree) {
+            void this.createIsolated(cmd);
+            return;
+          }
           const sessionId = this.create(cmd.provider, {
             model: cmd.model,
             cwd: cmd.cwd,
@@ -97,15 +103,47 @@ export class SessionManager {
 
   create(provider: string, options: AgentSessionOptions): string {
     const sessionId = `sess_${++this.counter}`;
+    this.register(sessionId, provider, options);
+    return sessionId;
+  }
+
+  private register(
+    sessionId: string,
+    provider: string,
+    options: AgentSessionOptions,
+    worktree?: Worktree,
+  ): void {
     const session = this.createSessionFn(provider, options);
     this.sessions.set(sessionId, {
       session,
       cwd: options.cwd,
       checkpoint: null,
       commands: loadCommands(options.cwd),
+      worktree,
     });
     void this.pump(sessionId, session);
-    return sessionId;
+  }
+
+  /** Create a session in an isolated git worktree (async: git setup first). */
+  private async createIsolated(
+    cmd: Extract<ClientCommand, { type: "create_session" }>,
+  ): Promise<void> {
+    const sessionId = `sess_${++this.counter}`;
+    let cwd = cmd.cwd;
+    let worktree: Worktree | undefined;
+    try {
+      worktree = (await createWorktree(cmd.cwd, sessionId)) ?? undefined;
+      if (worktree) cwd = worktree.path;
+    } catch (err) {
+      this.emitError(`worktree setup failed: ${this.message(err)}`);
+    }
+    this.register(sessionId, cmd.provider, { model: cmd.model, cwd }, worktree);
+    this.onEvent({
+      type: "session_created",
+      requestId: cmd.requestId,
+      sessionId,
+      branch: worktree?.branch,
+    });
   }
 
   private async checkpoint(sessionId: string, entry: SessionEntry): Promise<void> {
@@ -142,8 +180,11 @@ export class SessionManager {
     } catch (err) {
       this.emitError(this.message(err), sessionId);
     } finally {
+      const worktree = this.sessions.get(sessionId)?.worktree;
       this.sessions.delete(sessionId);
       this.onEvent({ type: "session_closed", sessionId });
+      // Preserve the isolated session's work to its branch, then tear down.
+      if (worktree) void removeWorktree(worktree);
     }
   }
 
