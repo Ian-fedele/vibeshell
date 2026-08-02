@@ -1,8 +1,43 @@
+import type { ReactNode } from "react";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import { Pane } from "./Pane";
 import { WorkspaceItem } from "./WorkspaceItem";
 import { useEngine } from "./useEngine";
-import { formatTokens, MODELS } from "./store";
+import { formatTokens, MODELS, type Pane as PaneState } from "./store";
 import "./App.css";
+
+const COLUMNS = 2;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
+  return rows;
+}
+
+/** A vertical stack of rows; each row a horizontal group of panes, with drag
+ * handles between rows and between columns. */
+function buildRows(rows: PaneState[][], renderPane: (pane: PaneState) => ReactNode): ReactNode[] {
+  return rows.flatMap((row, ri) => {
+    const columns = row.flatMap((pane, ci) => {
+      const cell = (
+        <Panel key={pane.id} minSize={240}>
+          {renderPane(pane)}
+        </Panel>
+      );
+      return ci > 0
+        ? [<Separator key={`h-${pane.id}`} className="rh rh-col" />, cell]
+        : [cell];
+    });
+    const rowPanel = (
+      <Panel key={`row-${ri}`} minSize={160}>
+        <Group orientation="horizontal" className="pg">
+          {columns}
+        </Group>
+      </Panel>
+    );
+    return ri > 0 ? [<Separator key={`v-${ri}`} className="rh rh-row" />, rowPanel] : [rowPanel];
+  });
+}
 
 export default function App() {
   const {
@@ -27,6 +62,16 @@ export default function App() {
   const activePanes = state.panes.filter((p) => p.workspaceId === state.activeWorkspaceId);
   const activeWorkspace = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
   const workspaceTokens = activePanes.reduce((sum, p) => sum + p.tokens, 0);
+
+  const renderPane = (pane: PaneState) => (
+    <Pane
+      pane={pane}
+      onSend={(text) => sendMessage(pane.id, text)}
+      onClose={() => closePane(pane.id)}
+      onRespond={(requestId, decision) => respondPermission(pane.id, requestId, decision)}
+      onUndo={() => undo(pane.id)}
+    />
+  );
 
   return (
     <div className="app">
@@ -93,16 +138,13 @@ export default function App() {
           {activePanes.length === 0 ? (
             <div className="empty">No sessions in this workspace. Click “+ New session”.</div>
           ) : (
-            activePanes.map((pane) => (
-              <Pane
-                key={pane.id}
-                pane={pane}
-                onSend={(text) => sendMessage(pane.id, text)}
-                onClose={() => closePane(pane.id)}
-                onRespond={(requestId, decision) => respondPermission(pane.id, requestId, decision)}
-                onUndo={() => undo(pane.id)}
-              />
-            ))
+            <Group
+              key={activePanes.map((p) => p.id).join(",")}
+              orientation="vertical"
+              className="pg"
+            >
+              {buildRows(chunk(activePanes, COLUMNS), renderPane)}
+            </Group>
           )}
         </main>
       </div>
