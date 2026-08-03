@@ -151,7 +151,7 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
       // Rehydrate after UI/engine restart without replaying turns in the feed.
       ...(historyPrompt ? { appendSystemPrompt: historyPrompt } : {}),
       canUseTool: (toolName, toolInput, opts) => {
-        if (isAutoAllowed(toolName)) {
+        if (isAutoAllowed(toolName, toolInput, options.cwd)) {
           return Promise.resolve<PermissionResult>({ behavior: "allow" });
         }
         return new Promise<PermissionResult>((resolve) => {

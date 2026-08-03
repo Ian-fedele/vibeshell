@@ -88,7 +88,7 @@ function createGrokApiSession(
     // A turn that was interrupted/closed must not block on a fresh approval —
     // deny immediately so the tool loop unwinds instead of hanging forever.
     if (abort?.signal.aborted) return Promise.resolve({ type: "deny" });
-    if (isAutoAllowed(toolName) || alwaysAllow.has(toolName)) {
+    if (isAutoAllowed(toolName, args, options.cwd) || alwaysAllow.has(toolName)) {
       return Promise.resolve({ type: "allow" });
     }
     return new Promise((resolve) => {
