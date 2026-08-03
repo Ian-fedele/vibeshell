@@ -18,6 +18,7 @@ import { createInputPump } from "../inputPump.js";
 import { loadMcpServers } from "./mcp.js";
 import { loadAgents } from "./agents.js";
 import { buildPreview, isAutoAllowed } from "../permissions.js";
+import { extractToolLinks, summarizeToolInput } from "../toolMeta.js";
 import type {
   AgentEvent,
   AgentProvider,
@@ -33,8 +34,60 @@ export function toAgentEvents(msg: SDKMessage): AgentEvent[] {
       const events: AgentEvent[] = [];
       for (const block of msg.message.content) {
         if (block.type === "text") events.push({ type: "text", text: block.text });
-        else if (block.type === "tool_use")
-          events.push({ type: "tool", name: block.name });
+        else if (block.type === "tool_use") {
+          const input =
+            block.input && typeof block.input === "object"
+              ? (block.input as Record<string, unknown>)
+              : undefined;
+          events.push({
+            type: "tool",
+            name: block.name,
+            id: block.id,
+            detail: summarizeToolInput(block.name, input),
+            status: "running",
+          });
+        }
+      }
+      return events;
+    }
+    case "user": {
+      // Tool results arrive as user messages with tool_result blocks + optional
+      // structured tool_use_result (e.g. WebSearchOutput with title/url hits).
+      const events: AgentEvent[] = [];
+      const content = msg.message?.content;
+      const links = extractToolLinks(msg.tool_use_result);
+
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (!block || typeof block !== "object") continue;
+          const b = block as {
+            type?: string;
+            tool_use_id?: string;
+            content?: unknown;
+            is_error?: boolean;
+          };
+          if (b.type !== "tool_result") continue;
+          const blockLinks = [
+            ...links,
+            ...extractToolLinks(b.content),
+            ...extractToolLinks(msg.tool_use_result),
+          ];
+          // Dedupe by url
+          const seen = new Set<string>();
+          const unique = blockLinks.filter((l) => {
+            if (seen.has(l.url)) return false;
+            seen.add(l.url);
+            return true;
+          });
+          events.push({
+            type: "tool",
+            id: b.tool_use_id,
+            status: b.is_error ? "error" : "done",
+            ...(unique.length ? { links: unique } : {}),
+          });
+        }
+      } else if (links.length > 0) {
+        events.push({ type: "tool", status: "done", links });
       }
       return events;
     }

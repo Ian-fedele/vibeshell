@@ -7,7 +7,7 @@ An open-source **desktop app for running multiple AI coding agents at once** —
 ## Why vibeshell?
 
 - **Many agents, one window** — run several sessions side by side in resizable panes, grouped into workspaces.
-- **Multi-provider** — Claude today, with a provider seam so others (e.g. OpenAI) slot in without touching the UI.
+- **Multi-provider** — Claude and Grok side by side (one pane each), with a provider seam so more backends slot in without touching the UI.
 - **Open and hackable** — extension points (commands, hooks, subagents, MCP) are the product, not an afterthought.
 - **No telemetry.** Ever. Your code and prompts go to the model provider you configure, and nowhere else.
 
@@ -27,7 +27,9 @@ Three parts (see `agentic-dev-env-roadmap.md` for the full picture):
 - [Rust](https://rustup.rs) (for the Tauri shell) — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 - Xcode Command Line Tools (macOS) / the [Tauri system deps](https://v2.tauri.app/start/prerequisites/) for your OS
 - `export ANTHROPIC_API_KEY=sk-ant-...` (or sign in via `claude` / the Claude Agent SDK's auth)
-- For the Grok provider: `export XAI_API_KEY=xai-...` (a developer key from console.x.ai — separate from a SuperGrok/X consumer subscription)
+- For the **Grok** provider, either:
+  - **Recommended if you use Grok Build:** install the CLI and log in (`curl -fsSL https://x.ai/cli/install.sh | bash` then `grok login`). vibeshell will drive headless `grok` with your existing session — no separate API key needed.
+  - **Or** set `XAI_API_KEY=xai-...` from [console.x.ai](https://console.x.ai) (developer API; separate from a SuperGrok/X consumer subscription). Optional: put it in a project `.env` or `~/.vibeshell/.env`.
 
 ### Run the desktop app
 
@@ -75,7 +77,12 @@ MCP tool calls go through the same approval prompt as any other gated tool.
 
 ## Providers
 
-Pick a provider in the top bar. **Claude** (default) runs on the Claude Agent SDK. **Grok** (xAI) runs on our own agent loop against xAI's OpenAI-compatible API (`XAI_API_KEY`) — useful as a fallback when Claude is rate-limited. Both go through the same approval, undo, and worktree layers. Every layer above the provider is provider-agnostic, so adding another backend is one adapter file behind `src/agent/providers/`.
+Pick a provider in the top bar before **+ New session**. **Claude** (default) runs on the Claude Agent SDK. **Grok** (xAI) uses:
+
+1. **API mode** when `XAI_API_KEY` is set — our agent loop against xAI's OpenAI-compatible API, with vibeshell's tool approvals.
+2. **CLI mode** otherwise — headless `grok -p` (your `grok login` auth), full Grok Build tools. Tools are auto-approved on this path; isolate worktrees + undo still apply.
+
+You can run a Claude pane and a Grok pane at the same time. Every layer above the provider is provider-agnostic, so adding another backend is one adapter file behind `src/agent/providers/`.
 
 ## Self-hosted development (building vibeshell in vibeshell)
 

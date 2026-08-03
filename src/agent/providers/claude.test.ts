@@ -14,14 +14,61 @@ describe("toAgentEvents", () => {
         message: {
           content: [
             { type: "text", text: "Let me look." },
-            { type: "tool_use", name: "Read" },
+            {
+              type: "tool_use",
+              name: "Read",
+              id: "tu_read",
+              input: { file_path: "a.ts" },
+            },
           ],
         },
       }),
     );
     expect(events).toEqual([
       { type: "text", text: "Let me look." },
-      { type: "tool", name: "Read" },
+      {
+        type: "tool",
+        name: "Read",
+        id: "tu_read",
+        detail: "a.ts",
+        status: "running",
+      },
+    ]);
+  });
+
+  it("maps WebSearch tool results to links", () => {
+    const events = toAgentEvents(
+      asMsg({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tu_ws",
+              content: "search done",
+            },
+          ],
+        },
+        tool_use_result: {
+          query: "xai grok",
+          results: [
+            {
+              tool_use_id: "tu_ws",
+              content: [{ title: "xAI", url: "https://x.ai" }],
+            },
+          ],
+          durationSeconds: 0.5,
+        },
+      }),
+    );
+    expect(events).toEqual([
+      {
+        type: "tool",
+        id: "tu_ws",
+        status: "done",
+        links: [{ url: "https://x.ai", title: "xAI" }],
+      },
     ]);
   });
 

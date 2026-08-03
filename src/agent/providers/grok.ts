@@ -1,12 +1,23 @@
 /**
- * Grok provider (xAI). The Claude Agent SDK can't drive Grok, so this
- * implements the agent loop ourselves against xAI's OpenAI-compatible API:
- * stream the model, execute the tools it requests (gated by the same approval
- * UI), feed results back, repeat until it stops. Needs XAI_API_KEY.
+ * Grok provider (xAI).
+ *
+ * Two backends, same AgentSession surface:
+ *  1. API — OpenAI-compatible chat completions + vibeshell tool loop
+ *     (requires XAI_API_KEY from console.x.ai).
+ *  2. CLI — headless `grok -p` streaming-json, using the user's existing
+ *     Grok Build login (`grok login` / ~/.grok/auth.json).
+ *
+ * Prefers the API when a key is present; otherwise falls back to the CLI so
+ * desktop users who already authenticated the CLI can chat without a separate
+ * developer key.
  */
+import { spawnSync } from "node:child_process";
 import OpenAI from "openai";
+import { envValue, loadVibeshellEnv } from "../env.js";
 import { createInputPump } from "../inputPump.js";
 import { buildPreview, isAutoAllowed } from "../permissions.js";
+import { createGrokCliSession, resolveGrokBin } from "./grok-cli.js";
+import { extractToolLinks, summarizeToolInput } from "../toolMeta.js";
 import { GROK_EXECUTORS, GROK_TOOLS } from "./grok-tools.js";
 import type {
   AgentEvent,
@@ -19,6 +30,10 @@ import type {
 type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
 const XAI_BASE_URL = "https://api.x.ai/v1";
+
+export const GROK_CONFIG_HELP =
+  "Grok is not configured. Set XAI_API_KEY (https://console.x.ai) in the environment " +
+  "or a .env file, or install and authenticate the grok CLI (`curl -fsSL https://x.ai/cli/install.sh | bash` then `grok login`).";
 
 function systemPrompt(cwd: string): string {
   return [
@@ -34,11 +49,22 @@ interface Pending {
   toolName: string;
 }
 
-function createGrokSession(options: AgentSessionOptions): AgentSession {
+function grokCliReady(): boolean {
+  const probe = spawnSync(resolveGrokBin(), ["--version"], {
+    encoding: "utf8",
+    timeout: 8000,
+  });
+  return !probe.error && probe.status === 0;
+}
+
+function createGrokApiSession(
+  options: AgentSessionOptions,
+  apiKey: string,
+): AgentSession {
   const input = createInputPump<string>();
   const output = createInputPump<AgentEvent>();
   const client = new OpenAI({
-    apiKey: process.env.XAI_API_KEY ?? "",
+    apiKey,
     baseURL: XAI_BASE_URL,
   });
 
@@ -114,24 +140,49 @@ function createGrokSession(options: AgentSessionOptions): AgentSession {
           } catch {
             // leave args empty; the executor will report a helpful error
           }
-          output.push({ type: "tool", name });
+          output.push({
+            type: "tool",
+            name,
+            id: call.id,
+            detail: summarizeToolInput(name, args),
+            status: "running",
+          });
           const decision = await gate(name, args, call.id);
           if (decision.type === "allow_always") alwaysAllow.add(name);
           const result =
             decision.type === "deny"
               ? `Denied by user${decision.message ? `: ${decision.message}` : ""}`
               : await runTool(name, args);
+          const links = extractToolLinks(result);
+          // Also surface the target URL for fetch-like tools from the input.
+          if (typeof args.url === "string") {
+            const fromInput = extractToolLinks(args.url);
+            for (const l of fromInput) {
+              if (!links.some((x) => x.url === l.url)) links.push(l);
+            }
+          }
+          output.push({
+            type: "tool",
+            name,
+            id: call.id,
+            status: decision.type === "deny" ? "error" : "done",
+            ...(links.length ? { links } : {}),
+          });
           messages.push({ role: "tool", tool_call_id: call.id, content: result });
         }
         // loop: let the model continue now that it has the tool results
       }
     } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      const reason = /api key|authentication|401|unauthorized/i.test(raw)
+        ? `${raw} — check XAI_API_KEY (https://console.x.ai)`
+        : raw;
       output.push({
         type: "result",
         ok: false,
         durationMs: 0,
         tokens: 0,
-        reason: err instanceof Error ? err.message : String(err),
+        reason,
       });
     } finally {
       abort = null;
@@ -168,6 +219,22 @@ function createGrokSession(options: AgentSessionOptions): AgentSession {
     },
     events: output.iterable,
   };
+}
+
+function createGrokSession(options: AgentSessionOptions): AgentSession {
+  loadVibeshellEnv();
+  const apiKey = envValue("XAI_API_KEY");
+  if (apiKey) return createGrokApiSession(options, apiKey);
+
+  if (envValue("GROK_REQUIRE_API") === "1") {
+    throw new Error(GROK_CONFIG_HELP);
+  }
+
+  if (!grokCliReady()) {
+    throw new Error(GROK_CONFIG_HELP);
+  }
+
+  return createGrokCliSession(options);
 }
 
 export const grokProvider: AgentProvider = {

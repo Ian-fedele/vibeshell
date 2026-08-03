@@ -18,9 +18,18 @@ function render(event: AgentEvent, cost: { tokens: number }): boolean {
     case "text":
       stdout.write(event.text);
       return false;
-    case "tool":
-      stdout.write(dim(`\n[${event.name}] `));
+    case "tool": {
+      const label = event.name ?? "tool";
+      const detail = event.detail ? ` ${event.detail}` : "";
+      stdout.write(dim(`\n[${label}]${detail} `));
+      if (event.links?.length) {
+        for (const link of event.links) {
+          stdout.write(dim(`\n  → ${link.title ? `${link.title} · ` : ""}${link.url}`));
+        }
+        stdout.write(" ");
+      }
       return false;
+    }
     case "permission_request":
       // Handled (auto-approved) in the loop before render; shown for context.
       stdout.write(dim(`\n[auto-approving ${event.toolName}] `));

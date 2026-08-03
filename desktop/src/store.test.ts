@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { reducer, initialState, DEFAULT_WORKSPACE_ID, type State } from "./store";
+import {
+  applyToolEvent,
+  reducer,
+  initialState,
+  DEFAULT_WORKSPACE_ID,
+  type FeedItem,
+  type State,
+} from "./store";
 
 const WS = DEFAULT_WORKSPACE_ID;
 
@@ -18,6 +25,72 @@ describe("session store", () => {
     expect(state.panes[0]!.sessionId).toBe("sess_a");
     expect(state.panes[0]!.workspaceId).toBe(WS);
     expect(state.bySession).toEqual({ sess_a: "pane_1" });
+  });
+
+  it("marks a pane running on send and idle on result", () => {
+    const running = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      {
+        type: "engine",
+        event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" },
+      },
+      { type: "user_message", paneId: "pane_1", text: "hi" },
+    ]);
+    expect(running.panes[0]!.running).toBe(true);
+
+    const done = reducer(running, {
+      type: "engine",
+      event: {
+        type: "agent_event",
+        sessionId: "sess_a",
+        event: { type: "result", ok: true, durationMs: 10, tokens: 100 },
+      },
+    });
+    expect(done.panes[0]!.running).toBe(false);
+  });
+
+  it("stop_turn clears running and adds a notice", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      { type: "user_message", paneId: "pane_1", text: "go" },
+      { type: "stop_turn", paneId: "pane_1" },
+    ]);
+    expect(state.panes[0]!.running).toBe(false);
+    expect(state.panes[0]!.items.some((i) => i.kind === "notice" && i.text === "stopped")).toBe(
+      true,
+    );
+  });
+
+  it("merges tool results and links into the same feed row", () => {
+    const started: FeedItem[] = applyToolEvent([], {
+      type: "tool",
+      name: "WebSearch",
+      id: "tu_1",
+      detail: "rust async",
+      status: "running",
+    });
+    const done = applyToolEvent(started, {
+      type: "tool",
+      id: "tu_1",
+      status: "done",
+      links: [
+        { title: "Tokio", url: "https://tokio.rs" },
+        { url: "https://docs.rs/tokio" },
+      ],
+    });
+    expect(done).toEqual([
+      {
+        kind: "tool",
+        name: "WebSearch",
+        id: "tu_1",
+        detail: "rust async",
+        status: "done",
+        links: [
+          { title: "Tokio", url: "https://tokio.rs" },
+          { url: "https://docs.rs/tokio" },
+        ],
+      },
+    ]);
   });
 
   it("routes agent events to the pane that owns the session", () => {
@@ -196,7 +269,59 @@ describe("session store", () => {
   it("set_provider switches provider and resets model to that provider's default", () => {
     const state = run([{ type: "set_provider", provider: "grok" }]);
     expect(state.provider).toBe("grok");
-    expect(state.model).toBe("grok-4");
+    expect(state.model).toBe("grok-4.5");
+  });
+
+  it("snapshots provider/model onto new panes", () => {
+    const state = run([
+      { type: "set_provider", provider: "grok" },
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "g" },
+    ]);
+    expect(state.panes[0]!.provider).toBe("grok");
+    expect(state.panes[0]!.model).toBe("grok-4.5");
+  });
+
+  it("rebind_pane switches provider/model and clears session binding", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      {
+        type: "engine",
+        event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" },
+      },
+      {
+        type: "rebind_pane",
+        paneId: "pane_1",
+        provider: "grok",
+        model: "grok-4.5",
+        notice: "switched to grok · grok-4.5",
+      },
+    ]);
+    const pane = state.panes[0]!;
+    expect(pane.provider).toBe("grok");
+    expect(pane.model).toBe("grok-4.5");
+    expect(pane.sessionId).toBeNull();
+    expect(state.bySession.sess_a).toBeUndefined();
+    expect(pane.items).toContainEqual({
+      kind: "notice",
+      text: "switched to grok · grok-4.5",
+    });
+  });
+
+  it("surfaces create_session errors via requestId (pane id)", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      {
+        type: "engine",
+        event: {
+          type: "error",
+          requestId: "pane_1",
+          message: "Grok is not configured",
+        },
+      },
+    ]);
+    expect(state.panes[0]!.items).toEqual([
+      { kind: "notice", text: "error: Grok is not configured" },
+    ]);
   });
 
   it("records the worktree branch from session_created", () => {

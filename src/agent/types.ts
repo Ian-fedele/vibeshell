@@ -20,10 +20,27 @@ export type ToolPreview =
 export type PermissionDecision =
   { type: "allow" } | { type: "allow_always" } | { type: "deny"; message?: string };
 
+/** A clickable citation / visited page from a tool (web search, fetch, …). */
+export interface ToolLink {
+  url: string;
+  title?: string;
+}
+
 /** Normalized, provider-agnostic events the UI renders. */
 export type AgentEvent =
   | { type: "text"; text: string }
-  | { type: "tool"; name: string }
+  | {
+      type: "tool";
+      /** Tool name on start; may be omitted on status/link updates matched by id. */
+      name?: string;
+      /** Provider tool-call id when available (used to merge start + result). */
+      id?: string;
+      /** One-line detail (search query, URL, path, command). */
+      detail?: string;
+      status?: "running" | "done" | "error";
+      /** Sites visited / search hits — rendered as clickable chips. */
+      links?: ToolLink[];
+    }
   | {
       type: "permission_request";
       requestId: string;

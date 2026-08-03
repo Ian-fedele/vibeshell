@@ -20,8 +20,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "prettier --check .",
     "format": "prettier --write .",
-    "dev:engine": "tsx src/server.ts",
-    "dev:desktop": "PATH=\"$HOME/.cargo/bin:$PATH\" pnpm -C desktop tauri dev"
+    "dev:engine": "PATH=\"$HOME/.grok/bin:$HOME/.cargo/bin:$PATH\" tsx src/server.ts",
+    "dev:desktop": "PATH=\"$HOME/.cargo/bin:$HOME/.grok/bin:$PATH\" pnpm -C desktop tauri dev"
   },
   "keywords": [
     "ai",

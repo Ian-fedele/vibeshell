@@ -7,7 +7,13 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { EngineClient } from "./engine";
 import type { PermissionDecision } from "./protocol";
-import { initialState, reducer, type State } from "./store";
+import {
+  initialState,
+  isEmptyPane,
+  MODELS_BY_PROVIDER,
+  reducer,
+  type State,
+} from "./store";
 
 let paneCounter = 0;
 let workspaceCounter = 1; // Workspace 1 exists in initialState
@@ -21,23 +27,60 @@ export function useEngine() {
   const clientRef = useRef<EngineClient | null>(null);
   const prevStatus = useRef(state.status);
 
-  const createSession = useCallback((paneId: string) => {
-    clientRef.current?.send({
-      type: "create_session",
-      requestId: paneId,
-      provider: stateRef.current.provider,
-      model: stateRef.current.model,
-      cwd: ".",
-      worktree: stateRef.current.isolate,
-    });
-  }, []);
+  /** Always pass provider/model explicitly — never rely on a pane that was
+   * just dispatched and is not in stateRef yet. */
+  const createSession = useCallback(
+    (paneId: string, opts?: { provider?: string; model?: string; worktree?: boolean }) => {
+      const pane = stateRef.current.panes.find((p) => p.id === paneId);
+      const provider =
+        opts?.provider ?? pane?.provider ?? stateRef.current.provider;
+      const model = opts?.model ?? pane?.model ?? stateRef.current.model;
+      clientRef.current?.send({
+        type: "create_session",
+        requestId: paneId,
+        provider,
+        model,
+        cwd: ".",
+        worktree: opts?.worktree ?? stateRef.current.isolate,
+      });
+    },
+    [],
+  );
+
+  /**
+   * Empty panes (no chat yet) follow the top-bar picker. Sessions with history
+   * keep their original provider — change those by opening a new session.
+   */
+  const rebindEmptyPanes = useCallback(
+    (provider: string, model: string) => {
+      for (const pane of stateRef.current.panes) {
+        if (!isEmptyPane(pane)) continue;
+        if (pane.provider === provider && pane.model === model) continue;
+
+        if (pane.sessionId) {
+          clientRef.current?.send({ type: "close_session", sessionId: pane.sessionId });
+        }
+        dispatch({
+          type: "rebind_pane",
+          paneId: pane.id,
+          provider,
+          model,
+          notice: `switched to ${provider} · ${model}`,
+        });
+        createSession(pane.id, { provider, model });
+      }
+    },
+    [createSession],
+  );
 
   const addPane = useCallback(() => {
     const paneId = nextPaneId();
     const workspaceId = stateRef.current.activeWorkspaceId;
     const count = stateRef.current.panes.filter((p) => p.workspaceId === workspaceId).length;
+    const provider = stateRef.current.provider;
+    const model = stateRef.current.model;
     dispatch({ type: "add_pane", paneId, workspaceId, title: `session ${count + 1}` });
-    createSession(paneId);
+    createSession(paneId, { provider, model });
   }, [createSession]);
 
   const addWorkspace = useCallback(() => {
@@ -45,8 +88,10 @@ export function useEngine() {
     dispatch({ type: "add_workspace", workspaceId, name: `Workspace ${workspaceCounter}` });
     // A fresh workspace starts with one ready session.
     const paneId = nextPaneId();
+    const provider = stateRef.current.provider;
+    const model = stateRef.current.model;
     dispatch({ type: "add_pane", paneId, workspaceId, title: "session 1" });
-    createSession(paneId);
+    createSession(paneId, { provider, model });
   }, [createSession]);
 
   const selectWorkspace = useCallback((workspaceId: string) => {
@@ -67,13 +112,23 @@ export function useEngine() {
     dispatch({ type: "delete_workspace", workspaceId });
   }, []);
 
-  const setProvider = useCallback((provider: string) => {
-    dispatch({ type: "set_provider", provider });
-  }, []);
+  const setProvider = useCallback(
+    (provider: string) => {
+      const model = MODELS_BY_PROVIDER[provider]?.[0] ?? stateRef.current.model;
+      dispatch({ type: "set_provider", provider });
+      // Apply immediately to empty panes (including the auto-created starter).
+      rebindEmptyPanes(provider, model);
+    },
+    [rebindEmptyPanes],
+  );
 
-  const setModel = useCallback((model: string) => {
-    dispatch({ type: "set_model", model });
-  }, []);
+  const setModel = useCallback(
+    (model: string) => {
+      dispatch({ type: "set_model", model });
+      rebindEmptyPanes(stateRef.current.provider, model);
+    },
+    [rebindEmptyPanes],
+  );
 
   const setIsolate = useCallback((isolate: boolean) => {
     dispatch({ type: "set_isolate", isolate });
@@ -109,6 +164,13 @@ export function useEngine() {
     dispatch({ type: "add_notice", paneId, text: "↩ reverted last turn's file changes" });
   }, []);
 
+  const stopTurn = useCallback((paneId: string) => {
+    const pane = stateRef.current.panes.find((p) => p.id === paneId);
+    if (!pane?.sessionId || !pane.running) return;
+    clientRef.current?.send({ type: "interrupt", sessionId: pane.sessionId });
+    dispatch({ type: "stop_turn", paneId });
+  }, []);
+
   // Connect once, open the first pane.
   useEffect(() => {
     if (clientRef.current) return; // guard StrictMode double-invoke
@@ -123,7 +185,9 @@ export function useEngine() {
   // Recreate sessions for existing panes after a reconnect (not the first open).
   useEffect(() => {
     if (state.status === "open" && prevStatus.current === "closed") {
-      for (const pane of stateRef.current.panes) createSession(pane.id);
+      for (const pane of stateRef.current.panes) {
+        createSession(pane.id, { provider: pane.provider, model: pane.model });
+      }
     }
     prevStatus.current = state.status;
   }, [state.status, createSession]);
@@ -142,5 +206,6 @@ export function useEngine() {
     closePane,
     respondPermission,
     undo,
+    stopTurn,
   };
 }

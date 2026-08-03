@@ -54,6 +54,7 @@ export default function App() {
     closePane,
     respondPermission,
     undo,
+    stopTurn,
   } = useEngine();
   const connected = state.status === "open";
 
@@ -71,6 +72,7 @@ export default function App() {
       onClose={() => closePane(pane.id)}
       onRespond={(requestId, decision) => respondPermission(pane.id, requestId, decision)}
       onUndo={() => undo(pane.id)}
+      onStop={() => stopTurn(pane.id)}
     />
   );
 
@@ -109,7 +111,7 @@ export default function App() {
             className="model-select"
             value={state.provider}
             onChange={(e) => setProvider(e.target.value)}
-            title="Provider for new sessions"
+            title="Provider — applies to empty sessions and new ones"
           >
             {PROVIDERS.map((p) => (
               <option key={p} value={p}>
@@ -121,7 +123,7 @@ export default function App() {
             className="model-select"
             value={state.model}
             onChange={(e) => setModel(e.target.value)}
-            title="Model for new sessions"
+            title="Model — applies to empty sessions and new ones"
           >
             {(MODELS_BY_PROVIDER[state.provider] ?? []).map((m) => (
               <option key={m} value={m}>

@@ -14,9 +14,21 @@ export type PermissionDecision =
   | { type: "allow_always" }
   | { type: "deny"; message?: string };
 
+export interface ToolLink {
+  url: string;
+  title?: string;
+}
+
 export type AgentEvent =
   | { type: "text"; text: string }
-  | { type: "tool"; name: string }
+  | {
+      type: "tool";
+      name?: string;
+      id?: string;
+      detail?: string;
+      status?: "running" | "done" | "error";
+      links?: ToolLink[];
+    }
   | { type: "permission_request"; requestId: string; toolName: string; title?: string; preview: ToolPreview }
   | { type: "result"; ok: boolean; durationMs: number; tokens: number; reason?: string };
 
