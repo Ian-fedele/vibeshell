@@ -26,6 +26,7 @@ import type {
   AgentSessionOptions,
   PermissionDecision,
 } from "../types.js";
+import { formatHistoryForPrompt } from "../types.js";
 
 type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
@@ -35,13 +36,14 @@ export const GROK_CONFIG_HELP =
   "Grok is not configured. Set XAI_API_KEY (https://console.x.ai) in the environment " +
   "or a .env file, or install and authenticate the grok CLI (`curl -fsSL https://x.ai/cli/install.sh | bash` then `grok login`).";
 
-function systemPrompt(cwd: string): string {
-  return [
+function systemPrompt(cwd: string, history?: string): string {
+  const base = [
     `You are vibeshell, a coding agent working in the directory ${cwd}.`,
     "You have tools to read, search, edit files, and run bash commands.",
     "Use the tools to actually make the changes the user asks for rather than only describing them.",
     "When the task is done, give a brief summary of what you changed.",
   ].join(" ");
+  return history ? `${base}\n\n${history}` : base;
 }
 
 interface Pending {
@@ -69,7 +71,10 @@ function createGrokApiSession(
   });
 
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt(options.cwd) },
+    {
+      role: "system",
+      content: systemPrompt(options.cwd, formatHistoryForPrompt(options.history)),
+    },
   ];
   const pending = new Map<string, Pending>();
   const alwaysAllow = new Set<string>();
@@ -80,6 +85,9 @@ function createGrokApiSession(
     args: Record<string, unknown>,
     requestId: string,
   ): Promise<PermissionDecision> {
+    // A turn that was interrupted/closed must not block on a fresh approval —
+    // deny immediately so the tool loop unwinds instead of hanging forever.
+    if (abort?.signal.aborted) return Promise.resolve({ type: "deny" });
     if (isAutoAllowed(toolName) || alwaysAllow.has(toolName)) {
       return Promise.resolve({ type: "allow" });
     }
@@ -92,6 +100,12 @@ function createGrokApiSession(
         preview: buildPreview(toolName, args),
       });
     });
+  }
+
+  /** Resolve any awaiting approval as deny so interrupt/close can't deadlock. */
+  function cancelPending(): void {
+    for (const entry of pending.values()) entry.resolve({ type: "deny" });
+    pending.clear();
   }
 
   async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
@@ -206,10 +220,13 @@ function createGrokApiSession(
       input.push(text);
     },
     close(): void {
+      abort?.abort();
+      cancelPending();
       input.end();
     },
     async interrupt(): Promise<void> {
       abort?.abort();
+      cancelPending();
     },
     respondPermission(requestId: string, decision: PermissionDecision): void {
       const entry = pending.get(requestId);

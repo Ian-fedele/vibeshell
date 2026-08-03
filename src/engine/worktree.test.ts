@@ -47,6 +47,52 @@ describe("worktree isolation", () => {
     expect(git(repo, "show", `${wt.branch}:new.txt`)).toBe("new file");
   });
 
+  it("preserves work even when git has no configured user identity", async () => {
+    // A repo with NO local identity, and global/system identity hidden — the
+    // unconfigured-machine case. Without removeWorktree supplying its own -c
+    // identity the commit fails and the staged work is discarded on --force.
+    const saved = {
+      global: process.env.GIT_CONFIG_GLOBAL,
+      system: process.env.GIT_CONFIG_SYSTEM,
+    };
+    process.env.GIT_CONFIG_GLOBAL = "/dev/null";
+    process.env.GIT_CONFIG_SYSTEM = "/dev/null";
+    const bare = mkdtempSync(join(tmpdir(), "vibeshell-noid-"));
+    try {
+      git(bare, "init");
+      writeFileSync(join(bare, "a.txt"), "base\n");
+      git(bare, "add", "-A");
+      // Only the seed commit gets an inline identity; the repo config stays empty.
+      git(
+        bare,
+        "-c",
+        "user.name=seed",
+        "-c",
+        "user.email=seed@x",
+        "commit",
+        "-m",
+        "init",
+      );
+
+      const wt = await createWorktree(bare, "sess_noid");
+      expect(wt).toBeTruthy();
+      if (!wt) return;
+      writeFileSync(join(wt.path, "a.txt"), "edited without identity\n");
+
+      await removeWorktree(wt);
+
+      expect(existsSync(wt.path)).toBe(false);
+      expect(git(bare, "show", `${wt.branch}:a.txt`)).toBe("edited without identity");
+    } finally {
+      if (saved.global === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = saved.global;
+      if (saved.system === undefined) delete process.env.GIT_CONFIG_SYSTEM;
+      else process.env.GIT_CONFIG_SYSTEM = saved.system;
+      rmSync(bare, { recursive: true, force: true });
+      rmSync(join(bare, "..", ".vibeshell-worktrees"), { recursive: true, force: true });
+    }
+  });
+
   it("returns null for a non-git directory", async () => {
     const plain = mkdtempSync(join(tmpdir(), "vibeshell-plain-"));
     try {

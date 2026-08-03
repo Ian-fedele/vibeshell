@@ -84,7 +84,7 @@ describe("SessionManager", () => {
     expect(events.at(-1)).toEqual({ type: "session_closed", sessionId });
   });
 
-  it("routes send_message to the correct session", () => {
+  it("routes send_message to the correct session", async () => {
     const fake = makeFake([]);
     const mgr = new SessionManager({
       createSession: () => fake.session,
@@ -93,6 +93,8 @@ describe("SessionManager", () => {
     });
     const sessionId = mgr.create("fake", { model: "m", cwd: "/" });
     mgr.handleCommand({ type: "send_message", sessionId, text: "hello" });
+    // send is dispatched only after the checkpoint snapshot resolves.
+    await tick();
     expect(fake.sent).toEqual(["hello"]);
   });
 
@@ -188,5 +190,30 @@ describe("SessionManager", () => {
       sessionId: "nope",
       requestId: undefined,
     });
+  });
+
+  it("list_sessions reports live sessions with metadata", () => {
+    const events: EngineEvent[] = [];
+    const mgr = new SessionManager({
+      createSession: () => makeFake([]).session,
+      checkpointer: noCheckpoint,
+      onEvent: (e) => events.push(e),
+    });
+    const sessionId = mgr.create("claude", { model: "claude-opus-5", cwd: "/repo" });
+    mgr.handleCommand({ type: "list_sessions" });
+    expect(events).toContainEqual({
+      type: "sessions_snapshot",
+      sessions: [
+        {
+          sessionId,
+          provider: "claude",
+          model: "claude-opus-5",
+          cwd: "/repo",
+          branch: undefined,
+          canUndo: false,
+        },
+      ],
+    });
+    expect(mgr.listSessions()).toHaveLength(1);
   });
 });

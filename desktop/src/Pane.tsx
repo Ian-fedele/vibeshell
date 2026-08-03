@@ -42,9 +42,20 @@ interface PaneProps {
   onRespond: (requestId: string, decision: PermissionDecision) => void;
   onUndo: () => void;
   onStop: () => void;
+  onReview: () => void;
+  onRetry?: () => void;
 }
 
-export function Pane({ pane, onSend, onClose, onRespond, onUndo, onStop }: PaneProps) {
+export function Pane({
+  pane,
+  onSend,
+  onClose,
+  onRespond,
+  onUndo,
+  onStop,
+  onReview,
+  onRetry,
+}: PaneProps) {
   const [input, setInput] = useState("");
   const feedRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -136,6 +147,19 @@ export function Pane({ pane, onSend, onClose, onRespond, onUndo, onStop }: PaneP
           </button>
         )}
         <button
+          type="button"
+          className="pane-undo"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onReview();
+          }}
+          disabled={!pane.sessionId}
+          title="Review working-tree changes"
+        >
+          diff
+        </button>
+        <button
           className="pane-undo"
           onClick={onUndo}
           disabled={!pane.canUndo || pane.running}
@@ -151,10 +175,26 @@ export function Pane({ pane, onSend, onClose, onRespond, onUndo, onStop }: PaneP
       <div className="feed" ref={feedRef}>
         {pane.items.length === 0 && !pane.running && (
           <div className="feed-empty">
-            <div className="feed-empty-title">Ready</div>
-            <div className="feed-empty-sub">
-              Message {pane.provider} · {pane.model}
-            </div>
+            {ready ? (
+              <>
+                <div className="feed-empty-title">Ready</div>
+                <div className="feed-empty-sub">
+                  Message {pane.provider} · {pane.model}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="feed-empty-title">Connecting session…</div>
+                <div className="feed-empty-sub">
+                  Binding {pane.provider} · {pane.model} to the engine
+                </div>
+                {onRetry && (
+                  <button type="button" className="feed-retry" onClick={onRetry}>
+                    Retry connect
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
         {pane.items.map((item, i) => {

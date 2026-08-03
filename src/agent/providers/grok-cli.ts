@@ -20,6 +20,7 @@ import type {
   AgentSessionOptions,
   PermissionDecision,
 } from "../types.js";
+import { formatHistoryForPrompt } from "../types.js";
 
 export function resolveGrokBin(): string {
   if (process.env.GROK_BIN?.trim()) return process.env.GROK_BIN.trim();
@@ -133,21 +134,9 @@ export function mapGrokStreamLine(line: string): {
   if (type === "end") {
     const sessionId = typeof row.sessionId === "string" ? row.sessionId : undefined;
     const usage = row.usage as { total_tokens?: number } | undefined;
-    const tokens =
-      typeof usage?.total_tokens === "number"
-        ? usage.total_tokens
-        : typeof row.num_turns === "number"
-          ? 0
-          : 0;
+    const tokens = typeof usage?.total_tokens === "number" ? usage.total_tokens : 0;
     return {
-      events: [
-        {
-          type: "result",
-          ok: true,
-          durationMs: 0,
-          tokens: usage?.total_tokens ?? tokens,
-        },
-      ],
+      events: [{ type: "result", ok: true, durationMs: 0, tokens }],
       sessionId,
       tokens: usage?.total_tokens,
     };
@@ -168,6 +157,8 @@ function runGrokPrompt(options: {
   model: string;
   cwd: string;
   resumeId: string | null;
+  /** Injected once on the first turn when we cannot resume a CLI session. */
+  rules?: string;
   signal: AbortSignal;
   onLine: (line: string) => void;
 }): Promise<{ code: number; stderr: string }> {
@@ -185,6 +176,9 @@ function runGrokPrompt(options: {
   ];
   if (options.resumeId) {
     args.push("--resume", options.resumeId);
+  } else if (options.rules) {
+    // Headless --rules appends to the system prompt (first turn only).
+    args.push("--rules", options.rules);
   }
 
   return new Promise((resolve, reject) => {
@@ -239,11 +233,15 @@ export function createGrokCliSession(options: AgentSessionOptions): AgentSession
   const output = createInputPump<AgentEvent>();
   let resumeId: string | null = null;
   let abort: AbortController | null = null;
+  const restoreRules = formatHistoryForPrompt(options.history);
+  let injectRestore = !!restoreRules;
 
   async function runTurn(text: string): Promise<void> {
     abort = new AbortController();
     let sawResult = false;
     let sawText = false;
+    const rules = injectRestore ? restoreRules : undefined;
+    injectRestore = false;
 
     try {
       const { code, stderr } = await runGrokPrompt({
@@ -251,6 +249,7 @@ export function createGrokCliSession(options: AgentSessionOptions): AgentSession
         model: options.model,
         cwd: options.cwd,
         resumeId,
+        rules,
         signal: abort.signal,
         onLine(line) {
           const mapped = mapGrokStreamLine(line);

@@ -26,6 +26,7 @@ import type {
   AgentSessionOptions,
   PermissionDecision,
 } from "../types.js";
+import { formatHistoryForPrompt } from "../types.js";
 
 /** Map one SDK message to zero or more normalized events. Pure — unit-tested. */
 export function toAgentEvents(msg: SDKMessage): AgentEvent[] {
@@ -132,6 +133,8 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
     Record<string, McpServerConfig> | undefined;
   const agents = loadAgents(options.cwd) as Record<string, AgentDefinition> | undefined;
 
+  const historyPrompt = formatHistoryForPrompt(options.history);
+
   const q: Query = query({
     prompt: input.iterable,
     options: {
@@ -145,6 +148,8 @@ function createClaudeSession(options: AgentSessionOptions): AgentSession {
       ...(mcpServers ? { mcpServers } : {}),
       // Subagents from .vibeshell/agents/*.md (see agents.ts).
       ...(agents ? { agents } : {}),
+      // Rehydrate after UI/engine restart without replaying turns in the feed.
+      ...(historyPrompt ? { appendSystemPrompt: historyPrompt } : {}),
       canUseTool: (toolName, toolInput, opts) => {
         if (isAutoAllowed(toolName)) {
           return Promise.resolve<PermissionResult>({ behavior: "allow" });

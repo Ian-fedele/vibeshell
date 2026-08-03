@@ -16,6 +16,35 @@ function run(actions: Parameters<typeof reducer>[1][]): State {
 }
 
 describe("session store", () => {
+  it("binds a terminal pane on terminal_created and clears on exit", () => {
+    const bound = run([
+      {
+        type: "add_pane",
+        paneId: "pane_t",
+        workspaceId: WS,
+        title: "terminal",
+        kind: "terminal",
+      },
+      {
+        type: "engine",
+        event: { type: "terminal_created", requestId: "pane_t", terminalId: "term_1", cwd: "/" },
+      },
+    ]);
+    expect(bound.panes[0]!.kind).toBe("terminal");
+    expect(bound.panes[0]!.terminalId).toBe("term_1");
+    expect(bound.panes[0]!.running).toBe(true);
+    expect(bound.bySession).toEqual({ term_1: "pane_t" });
+
+    const exited = reducer(bound, {
+      type: "engine",
+      event: { type: "terminal_exit", terminalId: "term_1", exitCode: 0 },
+    });
+    expect(exited.panes[0]!.terminalId).toBeNull();
+    expect(exited.panes[0]!.running).toBe(false);
+    expect(exited.panes[0]!.terminalExitCode).toBe(0);
+    expect(exited.bySession).toEqual({});
+  });
+
   it("adds a pane with no session, then binds it on session_created", () => {
     const state = run([
       { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "session 1" },
@@ -171,20 +200,95 @@ describe("session store", () => {
     expect(state.panes[0]!.tokens).toBe(12_000);
   });
 
-  it("on disconnect clears session ids and notes it, so reconnect can recreate", () => {
+  it("on disconnect keeps session ids so reconnect can reattach", () => {
     const state = run([
       { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
       { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
       { type: "status", status: "closed" },
     ]);
     expect(state.status).toBe("closed");
-    expect(state.panes[0]!.sessionId).toBeNull();
-    expect(state.bySession).toEqual({});
+    expect(state.panes[0]!.sessionId).toBe("sess_a");
+    expect(state.bySession).toEqual({ sess_a: "pane_1" });
     const items = state.panes[0]!.items;
     expect(items[items.length - 1]).toEqual({
       kind: "notice",
       text: "disconnected — reconnecting…",
     });
+  });
+
+  it("does not spam disconnect notices on repeated closed statuses", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
+      { type: "status", status: "closed" },
+      { type: "status", status: "closed" },
+    ]);
+    const notices = state.panes[0]!.items.filter(
+      (i) => i.kind === "notice" && i.text === "disconnected — reconnecting…",
+    );
+    expect(notices).toHaveLength(1);
+  });
+
+  it("sessions_snapshot reattaches live sessions and drops dead ones", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      { type: "add_pane", paneId: "pane_2", workspaceId: WS, title: "two" },
+      { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
+      { type: "engine", event: { type: "session_created", requestId: "pane_2", sessionId: "sess_b" } },
+      { type: "user_message", paneId: "pane_1", text: "keep me" },
+      { type: "status", status: "open" },
+      {
+        type: "engine",
+        event: {
+          type: "sessions_snapshot",
+          sessions: [
+            {
+              sessionId: "sess_a",
+              provider: "claude",
+              model: "claude-opus-5",
+              cwd: ".",
+              canUndo: true,
+            },
+          ],
+        },
+      },
+    ]);
+    expect(state.panes[0]!.sessionId).toBe("sess_a");
+    expect(state.panes[0]!.canUndo).toBe(true);
+    expect(state.panes[0]!.items.some((i) => i.kind === "user" && i.text === "keep me")).toBe(
+      true,
+    );
+    expect(state.panes[1]!.sessionId).toBeNull();
+    expect(state.bySession).toEqual({ sess_a: "pane_1" });
+  });
+
+  it("sessions_snapshot turns a disconnect notice into reconnected", () => {
+    const state = run([
+      { type: "add_pane", paneId: "pane_1", workspaceId: WS, title: "one" },
+      { type: "engine", event: { type: "session_created", requestId: "pane_1", sessionId: "sess_a" } },
+      { type: "status", status: "closed" },
+      { type: "status", status: "open" },
+      {
+        type: "engine",
+        event: {
+          type: "sessions_snapshot",
+          sessions: [
+            {
+              sessionId: "sess_a",
+              provider: "claude",
+              model: "claude-opus-5",
+              cwd: ".",
+              canUndo: false,
+            },
+          ],
+        },
+      },
+    ]);
+    const items = state.panes[0]!.items;
+    expect(items[items.length - 1]).toEqual({ kind: "notice", text: "reconnected" });
+    expect(items.some((i) => i.kind === "notice" && i.text === "disconnected — reconnecting…")).toBe(
+      false,
+    );
   });
 
   it("closing a pane removes it and its session mapping", () => {

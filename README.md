@@ -7,6 +7,11 @@ An open-source **desktop app for running multiple AI coding agents at once** —
 ## Why vibeshell?
 
 - **Many agents, one window** — run several sessions side by side in resizable panes, grouped into workspaces.
+- **Interactive terminals** — open a real shell pane (`+ Terminal`) next to agent chats via PTY + xterm.js.
+- **Command palette** — `⌘K` / `Ctrl+K` for sessions, terminals, projects, models, and more.
+- **Projects** — open a folder; new agents and shells start there. Recent projects in the sidebar.
+- **Review diffs** — per-pane **diff** opens a file tree + patch viewer; reject files to restore from checkpoint/HEAD.
+- **Isolates sidebar** — merge or discard `vibeshell/*` worktree branches from the UI.
 - **Multi-provider** — Claude and Grok side by side (one pane each), with a provider seam so more backends slot in without touching the UI.
 - **Open and hackable** — extension points (commands, hooks, subagents, MCP) are the product, not an afterthought.
 - **No telemetry.** Ever. Your code and prompts go to the model provider you configure, and nowhere else.
@@ -83,6 +88,10 @@ Pick a provider in the top bar before **+ New session**. **Claude** (default) ru
 2. **CLI mode** otherwise — headless `grok -p` (your `grok login` auth), full Grok Build tools. Tools are auto-approved on this path; isolate worktrees + undo still apply.
 
 You can run a Claude pane and a Grok pane at the same time. Every layer above the provider is provider-agnostic, so adding another backend is one adapter file behind `src/agent/providers/`.
+
+## Terminal panes
+
+Click **+ Terminal** in the top bar to open an interactive shell next to your agent sessions. Shells run as real PTYs in the engine (`node-pty`), stream to an xterm.js view, and support resize + restart. They use the engine process working directory (the same project root the agents see).
 
 ## Self-hosted development (building vibeshell in vibeshell)
 

@@ -40,10 +40,15 @@ export function formatTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
+export type PaneKind = "agent" | "terminal";
+
 export interface Pane {
   id: string;
   workspaceId: string;
+  kind: PaneKind;
   sessionId: string | null;
+  /** Bound PTY id when kind === "terminal". */
+  terminalId: string | null;
   title: string;
   /** Provider/model chosen when the pane was created (not the global picker). */
   provider: string;
@@ -55,6 +60,10 @@ export interface Pane {
   branch: string | null;
   /** True while a turn is in flight (between user send and result). */
   running: boolean;
+  /** Exit code from the last PTY exit (terminal panes). */
+  terminalExitCode: number | null;
+  /** Last terminal/engine error message (shown in the terminal chrome). */
+  lastError: string | null;
 }
 
 export interface Workspace {
@@ -70,7 +79,7 @@ export interface State {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   panes: Pane[];
-  bySession: Record<string, string>; // sessionId -> paneId
+  bySession: Record<string, string>; // sessionId|terminalId -> paneId
 }
 
 export type Action =
@@ -82,7 +91,13 @@ export type Action =
   | { type: "select_workspace"; workspaceId: string }
   | { type: "rename_workspace"; workspaceId: string; name: string }
   | { type: "delete_workspace"; workspaceId: string }
-  | { type: "add_pane"; paneId: string; workspaceId: string; title: string }
+  | {
+      type: "add_pane";
+      paneId: string;
+      workspaceId: string;
+      title: string;
+      kind?: PaneKind;
+    }
   | {
       type: "rebind_pane";
       paneId: string;
@@ -99,6 +114,7 @@ export type Action =
 
 /** True when the pane has no real chat yet (safe to switch provider/model). */
 export function isEmptyPane(pane: Pane): boolean {
+  if (pane.kind === "terminal") return false;
   return !pane.items.some((i) => i.kind === "user" || i.kind === "assistant" || i.kind === "tool");
 }
 
@@ -244,6 +260,47 @@ function applyEngineEvent(state: State, event: EngineEvent): State {
         (p) => ({ ...p, sessionId: event.sessionId, branch: event.branch ?? p.branch }),
       );
     }
+    case "terminal_created": {
+      const pane = state.panes.find((p) => p.id === event.requestId);
+      if (!pane) return state;
+      return updatePane(
+        { ...state, bySession: { ...state.bySession, [event.terminalId]: pane.id } },
+        pane.id,
+        (p) => ({
+          ...p,
+          terminalId: event.terminalId,
+          terminalExitCode: null,
+          running: true,
+          lastError: null,
+        }),
+      );
+    }
+    case "terminal_output":
+      // Output is streamed out-of-band to xterm listeners (see useEngine).
+      return state;
+    case "terminal_exit": {
+      const paneId = state.bySession[event.terminalId];
+      const bySession = { ...state.bySession };
+      delete bySession[event.terminalId];
+      const next = { ...state, bySession };
+      if (!paneId) return next;
+      return updatePane(next, paneId, (p) => ({
+        ...p,
+        terminalId: null,
+        running: false,
+        terminalExitCode: event.exitCode,
+        items: [
+          ...p.items,
+          {
+            kind: "notice" as const,
+            text:
+              event.exitCode === null
+                ? "shell exited"
+                : `shell exited · code ${event.exitCode}`,
+          },
+        ],
+      }));
+    }
     case "agent_event": {
       const paneId = state.bySession[event.sessionId];
       if (!paneId) return state;
@@ -260,11 +317,107 @@ function applyEngineEvent(state: State, event: EngineEvent): State {
       delete bySession[event.sessionId];
       const next = { ...state, bySession };
       return paneId
-        ? updatePane(next, paneId, (p) => ({ ...p, sessionId: null, running: false }))
+        ? updatePane(next, paneId, (p) => ({
+            ...p,
+            sessionId: null,
+            running: false,
+            pending: null,
+            canUndo: false,
+            items: [...p.items, { kind: "notice", text: "session ended" }],
+          }))
         : next;
     }
+    case "sessions_snapshot": {
+      // Reattach agent panes whose engine sessions are still alive; drop dead ids
+      // so the client can create replacements. Transcript stays in the pane.
+      const live = new Map(event.sessions.map((s) => [s.sessionId, s]));
+      const bySession: Record<string, string> = { ...state.bySession };
+      // Drop agent session bindings that aren't in this snapshot; keep terminal ids.
+      for (const [id, paneId] of Object.entries(state.bySession)) {
+        const pane = state.panes.find((p) => p.id === paneId);
+        if (pane?.kind === "agent" && !live.has(id)) {
+          delete bySession[id];
+        }
+      }
+      const panes = state.panes.map((p) => {
+        if (p.kind === "terminal") return p;
+        if (p.sessionId && live.has(p.sessionId)) {
+          bySession[p.sessionId] = p.id;
+          const info = live.get(p.sessionId)!;
+          return {
+            ...p,
+            canUndo: info.canUndo,
+            branch: info.branch ?? p.branch,
+            provider: info.provider || p.provider,
+            model: info.model || p.model,
+          };
+        }
+        if (p.sessionId) {
+          const notice = "previous session ended — reconnecting…";
+          const last = p.items[p.items.length - 1];
+          const items =
+            last?.kind === "notice" && last.text === notice
+              ? p.items
+              : [...p.items, { kind: "notice" as const, text: notice }];
+          return {
+            ...p,
+            sessionId: null,
+            running: false,
+            pending: null,
+            canUndo: false,
+            items,
+          };
+        }
+        return p;
+      });
+      const reattached = panes.some((p) => p.kind === "agent" && p.sessionId && live.has(p.sessionId));
+      const withNotice =
+        reattached && state.status === "open"
+          ? panes.map((p) => {
+              if (!p.sessionId) return p;
+              const last = p.items[p.items.length - 1];
+              if (last?.kind === "notice" && last.text === "disconnected — reconnecting…") {
+                return {
+                  ...p,
+                  items: [...p.items.slice(0, -1), { kind: "notice" as const, text: "reconnected" }],
+                };
+              }
+              if (last?.kind === "notice" && last.text === "reconnected") return p;
+              return p;
+            })
+          : panes;
+      return { ...state, panes: withNotice, bySession };
+    }
+    case "terminals_snapshot": {
+      const live = new Set(event.terminals.map((t) => t.terminalId));
+      const bySession = { ...state.bySession };
+      for (const [id, paneId] of Object.entries(state.bySession)) {
+        const pane = state.panes.find((p) => p.id === paneId);
+        if (pane?.kind === "terminal" && !live.has(id)) {
+          delete bySession[id];
+        }
+      }
+      const panes = state.panes.map((p) => {
+        if (p.kind !== "terminal") return p;
+        if (p.terminalId && live.has(p.terminalId)) {
+          bySession[p.terminalId] = p.id;
+          return { ...p, running: true, terminalExitCode: null };
+        }
+        if (p.terminalId) {
+          // Engine restarted — clear binding so UI can spawn a fresh shell.
+          return {
+            ...p,
+            terminalId: null,
+            running: false,
+            terminalExitCode: null,
+          };
+        }
+        return p;
+      });
+      return { ...state, panes, bySession };
+    }
     case "error": {
-      // create_session failures use requestId (= pane id); later errors use sessionId.
+      // create_* failures use requestId (= pane id); later errors use sessionId/terminalId.
       const paneId =
         (event.sessionId ? state.bySession[event.sessionId] : undefined) ??
         (event.requestId && state.panes.some((p) => p.id === event.requestId)
@@ -274,9 +427,13 @@ function applyEngineEvent(state: State, event: EngineEvent): State {
       return updatePane(state, paneId, (p) => ({
         ...p,
         running: false,
+        lastError: event.message,
         items: [...p.items, { kind: "notice", text: `error: ${event.message}` }],
       }));
     }
+    default:
+      // Review/worktree events are handled outside the chat reducer.
+      return state;
   }
 }
 
@@ -284,23 +441,24 @@ export function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "status": {
       if (action.status === "closed") {
-        // Sessions are gone server-side; clear ids so reconnect recreates them.
+        // Keep sessionIds — the engine keeps sessions across socket drops.
+        // The client reattaches via sessions_snapshot on the next open.
         return {
           ...state,
           status: "closed",
-          bySession: {},
-          panes: state.panes.map((p) =>
-            p.sessionId
-              ? {
-                  ...p,
-                  sessionId: null,
-                  pending: null,
-                  canUndo: false,
-                  running: false,
-                  items: [...p.items, { kind: "notice", text: "disconnected — reconnecting…" }],
-                }
-              : p,
-          ),
+          panes: state.panes.map((p) => {
+            if (!p.sessionId && !p.terminalId) return p;
+            const last = p.items[p.items.length - 1];
+            if (last?.kind === "notice" && last.text === "disconnected — reconnecting…") {
+              return p;
+            }
+            // Terminal scrollback lives in xterm, not the feed — skip notice spam.
+            if (p.kind === "terminal") return p;
+            return {
+              ...p,
+              items: [...p.items, { kind: "notice", text: "disconnected — reconnecting…" }],
+            };
+          }),
         };
       }
       return { ...state, status: action.status };
@@ -357,7 +515,9 @@ export function reducer(state: State, action: Action): State {
           {
             id: action.paneId,
             workspaceId: action.workspaceId,
+            kind: action.kind ?? "agent",
             sessionId: null,
+            terminalId: null,
             title: action.title,
             provider: state.provider,
             model: state.model,
@@ -367,12 +527,14 @@ export function reducer(state: State, action: Action): State {
             canUndo: false,
             branch: null,
             running: false,
+            terminalExitCode: null,
+            lastError: null,
           },
         ],
       };
     case "rebind_pane": {
       const pane = state.panes.find((p) => p.id === action.paneId);
-      if (!pane) return state;
+      if (!pane || pane.kind === "terminal") return state;
       const bySession = { ...state.bySession };
       if (pane.sessionId) delete bySession[pane.sessionId];
       return updatePane({ ...state, bySession }, action.paneId, (p) => ({
@@ -393,6 +555,7 @@ export function reducer(state: State, action: Action): State {
       const pane = state.panes.find((p) => p.id === action.paneId);
       const bySession = { ...state.bySession };
       if (pane?.sessionId) delete bySession[pane.sessionId];
+      if (pane?.terminalId) delete bySession[pane.terminalId];
       return { ...state, bySession, panes: state.panes.filter((p) => p.id !== action.paneId) };
     }
     case "user_message":

@@ -14,12 +14,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/server.ts --format esm --clean",
+    "build": "tsup src/index.ts src/server.ts --format esm --clean --external node-pty",
     "dev": "concurrently -k -n engine,desktop -c cyan,magenta \"pnpm dev:engine\" \"pnpm dev:desktop\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "prettier --check .",
     "format": "prettier --write .",
+    "postinstall": "node scripts/fix-node-pty.mjs",
     "dev:engine": "PATH=\"$HOME/.grok/bin:$HOME/.cargo/bin:$PATH\" tsx src/server.ts",
     "dev:desktop": "PATH=\"$HOME/.cargo/bin:$HOME/.grok/bin:$PATH\" pnpm -C desktop tauri dev"
   },
@@ -37,6 +38,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
+    "node-pty": "^1.1.0",
     "openai": "^7.3.0",
     "ws": "^8.21.1"
   },

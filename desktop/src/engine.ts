@@ -1,6 +1,8 @@
 /**
  * Thin browser-WebSocket client for the engine sidecar. Queues commands sent
- * before the socket opens and flushes them on connect.
+ * before the socket opens and flushes them on connect. Reconnects for as long
+ * as the page is alive so a Vite reload or brief engine blip does not kill the
+ * UI — engine sessions outlive the socket and reattach via sessions_snapshot.
  */
 import type { ClientCommand, EngineEvent } from "./protocol";
 
@@ -9,15 +11,16 @@ import type { ClientCommand, EngineEvent } from "./protocol";
 // remote engine (e.g. ws://your-mac:4517 over a tailnet).
 const ENGINE_URL = import.meta.env.VITE_ENGINE_URL ?? "ws://localhost:4517";
 const RETRY_MS = 500;
-const MAX_RETRIES = 20;
+const MAX_RETRY_MS = 5_000;
 
 export type ConnectionStatus = "connecting" | "open" | "closed";
 
 export class EngineClient {
   private ws: WebSocket | null = null;
   private queue: ClientCommand[] = [];
-  private opened = false;
   private retries = 0;
+  private disposed = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly onEvent: (event: EngineEvent) => void,
@@ -25,17 +28,39 @@ export class EngineClient {
   ) {}
 
   connect(): void {
+    if (this.disposed) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    // Drop a half-open socket before opening another.
+    if (this.ws) {
+      const prev = this.ws;
+      this.ws = null;
+      prev.onopen = null;
+      prev.onmessage = null;
+      prev.onerror = null;
+      prev.onclose = null;
+      try {
+        prev.close();
+      } catch {
+        // ignore
+      }
+    }
+
     this.onStatus("connecting");
     const ws = new WebSocket(ENGINE_URL);
     this.ws = ws;
+
     ws.onopen = () => {
-      this.opened = true;
+      if (this.ws !== ws) return;
       this.retries = 0;
       this.onStatus("open");
       for (const cmd of this.queue) ws.send(JSON.stringify(cmd));
       this.queue = [];
     };
     ws.onmessage = (message) => {
+      if (this.ws !== ws) return;
       try {
         this.onEvent(JSON.parse(message.data as string) as EngineEvent);
       } catch {
@@ -43,15 +68,41 @@ export class EngineClient {
       }
     };
     ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.ws = null;
       this.onStatus("closed");
-      // Retry only until the first successful connection — this covers the
-      // dev-startup race where the app opens before the engine is listening.
-      if (!this.opened && this.retries < MAX_RETRIES) {
-        this.retries += 1;
-        setTimeout(() => this.connect(), RETRY_MS);
+      this.scheduleReconnect();
+    };
+    ws.onerror = () => {
+      // onclose follows; avoid double-scheduling
+      try {
+        ws.close();
+      } catch {
+        // ignore
       }
     };
-    ws.onerror = () => ws.close();
+  }
+
+  /** Stop reconnecting (page unload / tests). */
+  dispose(): void {
+    this.disposed = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    const ws = this.ws;
+    this.ws = null;
+    if (ws) {
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      try {
+        ws.close();
+      } catch {
+        // ignore
+      }
+    }
   }
 
   send(cmd: ClientCommand): void {
@@ -60,5 +111,15 @@ export class EngineClient {
     } else {
       this.queue.push(cmd);
     }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.disposed) return;
+    const delay = Math.min(RETRY_MS * 2 ** this.retries, MAX_RETRY_MS);
+    this.retries += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, delay);
   }
 }

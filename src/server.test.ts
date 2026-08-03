@@ -7,6 +7,12 @@ describe("parseCommand", () => {
     expect(parseCommand(frame)).toEqual({ type: "interrupt", sessionId: "sess_1" });
   });
 
+  it("parses list_sessions", () => {
+    expect(parseCommand(JSON.stringify({ type: "list_sessions" }))).toEqual({
+      type: "list_sessions",
+    });
+  });
+
   it("returns null for invalid JSON", () => {
     expect(parseCommand("{not json")).toBeNull();
   });
