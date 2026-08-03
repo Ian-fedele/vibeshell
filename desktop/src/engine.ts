@@ -4,7 +4,10 @@
  */
 import type { ClientCommand, EngineEvent } from "./protocol";
 
-const ENGINE_URL = "ws://localhost:4517";
+// Defaults to loopback, which is what the Tauri shell and an SSH port-forward
+// both want. Override with VITE_ENGINE_URL to point a browser-hosted UI at a
+// remote engine (e.g. ws://your-mac:4517 over a tailnet).
+const ENGINE_URL = import.meta.env.VITE_ENGINE_URL ?? "ws://localhost:4517";
 const RETRY_MS = 500;
 const MAX_RETRIES = 20;
 

@@ -81,6 +81,52 @@ Pick a provider in the top bar. **Claude** (default) runs on the Claude Agent SD
 
 vibeshell is itself a coding agent operating on whatever directory the engine runs in — so it can improve its own code. Toggle **isolate** in the top bar and each new session runs in its own git worktree on a branch (`vibeshell/<sessionId>`): edits never touch your main checkout or other sessions, and on close the work is committed to that branch for you to review and merge. This is the safe way to let the agent edit the engine that's running it.
 
+## Remote access (connecting from another machine)
+
+The engine binds to `127.0.0.1` by default and has **no authentication** — a
+session is arbitrary code execution as you. Never expose it directly on a LAN or
+the public internet. To drive it from another machine (e.g. a Linux laptop
+talking to the engine on your Mac), tunnel over a trusted boundary.
+
+### Recommended: SSH tunnel
+
+Leave the engine on loopback (its default) and forward the port from the client:
+
+```sh
+# on the engine host (your Mac): run the engine as usual — bound to 127.0.0.1:4517
+pnpm dev:engine
+
+# on the client (the Linux laptop): forward local 4517 → the Mac's engine
+ssh -N -L 4517:localhost:4517 you@your-mac
+```
+
+Now the UI on the laptop uses the default `ws://localhost:4517` — no config, no
+exposed port, and the traffic rides SSH's encryption:
+
+```sh
+pnpm -C desktop dev            # Tauri window (or a browser at the Vite dev URL)
+```
+
+### Alternative: a tailnet (Tailscale)
+
+For always-on access without holding an SSH session open, put both machines on a
+[Tailscale](https://tailscale.com) tailnet, bind the engine to its tailnet
+address, and point the UI at it:
+
+```sh
+# on the Mac — bind to the tailnet interface (prints a security warning on startup)
+VIBESHELL_HOST=100.x.y.z pnpm dev:engine
+
+# on the Linux laptop — aim the UI at the Mac's tailnet address
+VITE_ENGINE_URL=ws://100.x.y.z:4517 pnpm -C desktop dev
+```
+
+`VIBESHELL_HOST` binds the engine to a routable interface — it warns on startup
+because the port is now reachable by anything that can route to that network, so
+keep the tailnet private. `VITE_ENGINE_URL` overrides the URL the UI dials. Even
+on a tailnet only devices you've added can reach the port; do not substitute a
+raw LAN IP.
+
 ## License
 
 Apache-2.0
