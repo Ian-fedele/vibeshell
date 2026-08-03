@@ -80,14 +80,28 @@ export async function mergeBranch(repo: string, branch: string): Promise<string>
     throw new Error("refusing to merge non-vibeshell branch");
   // Ensure branch exists
   await git(repo, ["rev-parse", "--verify", branch]);
+
+  // Refuse to merge into a dirty tree: a merge that touches those files would
+  // fail partway and leave the checkout in a confusing state. Make the user
+  // commit/stash first with a clear message instead.
+  const dirty = await git(repo, ["status", "--porcelain"]).catch(() => "");
+  if (dirty.trim()) {
+    throw new Error(
+      "working tree has uncommitted changes — commit or stash them before merging",
+    );
+  }
+
   try {
     await git(repo, ["merge", "--no-ff", branch, "-m", `Merge ${branch} (vibeshell)`]);
     return `Merged ${branch} into current branch`;
   } catch (err) {
+    // A conflicting merge leaves MERGE_HEAD + conflict markers behind. Abort so
+    // the checkout is restored to its pre-merge state rather than stranded.
+    await git(repo, ["merge", "--abort"]).catch(() => {});
     const msg = err instanceof Error ? err.message : String(err);
-    // include stderr if present
     const e = err as { stderr?: string };
-    throw new Error(e.stderr?.trim() || msg || "merge failed");
+    const detail = e.stderr?.trim() || msg || "merge failed";
+    throw new Error(`${detail} (merge aborted; working tree unchanged)`);
   }
 }
 

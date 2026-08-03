@@ -7,8 +7,20 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { access, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { isGitRepo } from "./checkpoint.js";
+
+/**
+ * True when `rel` resolves to a path strictly inside `cwd` (not `cwd` itself).
+ * Guards restore against `../` traversal and absolute paths arriving over the
+ * unauthenticated engine protocol — a restore must never touch anything outside
+ * the project it targets.
+ */
+export function isInsideCwd(cwd: string, rel: string): boolean {
+  const root = resolve(cwd);
+  const abs = resolve(root, rel);
+  return abs !== root && abs.startsWith(root + sep);
+}
 
 const run = promisify(execFile);
 
@@ -164,6 +176,11 @@ export async function restorePaths(
   }
 
   for (const rel of paths) {
+    // Reject anything that escapes the project before running git / rm on it.
+    if (!isInsideCwd(cwd, rel)) {
+      errors.push(`${rel}: refusing to restore a path outside the project`);
+      continue;
+    }
     const abs = join(cwd, rel);
     try {
       if (tree) {
